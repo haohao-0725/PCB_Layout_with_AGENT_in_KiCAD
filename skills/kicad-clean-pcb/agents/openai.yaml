@@ -1,0 +1,4 @@
+interface:
+  display_name: "KiCad Clean PCB"
+  short_description: "KiCad PCB workflow with human checkpoints: presets, yes/no decision checklist, 1:1 placement check before routing, tidy routing, Gerbers and order spec"
+  default_prompt: "Use $kicad-clean-pcb to take this board from requirements to fab files. Start with the scope check and design preset, record decisions in PCB_DECISIONS.md, and get my confirmation at each checkpoint."

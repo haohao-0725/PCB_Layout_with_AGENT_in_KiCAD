@@ -1,0 +1,16 @@
+{
+  "name": "pcb-layout-with-agent",
+  "description": "KiCad PCB design workflow skill for AI coding agents (human-in-the-loop placement, tidy routing, fab-ready outputs).",
+  "owner": {
+    "name": "haohao-0725"
+  },
+  "plugins": [
+    {
+      "name": "kicad-clean-pcb",
+      "source": ".",
+      "description": "KiCad PCB workflow with human checkpoints: presets, yes/no decision checklist, 1:1 placement check before routing, structured routing, Gerber readback and order specs.",
+      "category": "hardware",
+      "tags": ["kicad", "pcb", "electronics", "gerber"]
+    }
+  ]
+}
