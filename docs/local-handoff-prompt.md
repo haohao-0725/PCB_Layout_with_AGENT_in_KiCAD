@@ -15,12 +15,14 @@
 
 | 項目 | 我的決定 | 參考選項 |
 |---|---|---|
-| MCU 開發板 | | Raspberry Pi Pico / ESP32-DevKitC / Nucleo-32 / Blue Pill（以手邊有的為優先） |
-| 步進驅動模組 | | A4988 / DRV8825 / TMC2209（StepStick 尺寸） |
-| 層數 | | 建議 2 層（便宜、好焊） |
-| 5 V 來源 | | MP1584 / LM2596 降壓模組 |
-| 板廠 | | JLCPCB / PCBWay / 台灣在地 |
-| 預設選項（Part A） | | 建議：T 整齊風格、A1=a、A11=a（THT 手焊）、A16=b（線上板廠）、A17=繁體中文 |
+| MCU 開發板 | **NUCLEO-F446ZE**（Nucleo-144，70 × 133.34 mm，手邊有） | Raspberry Pi Pico / ESP32-DevKitC / Nucleo-32 / Blue Pill（以手邊有的為優先） |
+| 步進驅動模組 | **TMC2209**（手邊的 MKS TMC2209 V2.0_001，18 腳：2×8 加 VREF／DIAG） | A4988 / DRV8825 / TMC2209（StepStick 尺寸） |
+| 層數 | **4 層**（4L-S1） | 建議 2 層（便宜、好焊） |
+| 5 V 來源 | **LM2596** 降壓模組 | MP1584 / LM2596 降壓模組 |
+| 板廠 | **JLCPCB** | JLCPCB / PCBWay / 台灣在地 |
+| 預設選項（Part A） | **照建議**：T 整齊風格、A1=a、A11=a（THT 手焊）、A16=b（JLCPCB）、A17=繁體中文 | 建議：T 整齊風格、A1=a、A11=a（THT 手焊）、A16=b（線上板廠）、A17=繁體中文 |
+| 板子尺寸（2026-10-29 新增） | **A13=a**：保留走線通道的最小尺寸，擺完再定（估算約 115 × 145 mm；Nucleo-144 放不進原訂的 80 × 60 mm） | — |
+| 實測資料來源（2026-10-29 新增） | **可以沿用**本機 `prpr_carrier` 專案的實測幾何（Nucleo 排母位置、MKS TMC2209 18P、端子台）。只抄尺寸數字重新產生 footprint，不複製原專案檔案、研究專屬接線或照片 | — |
 
 ## 1. 背景：repo 現況
 
@@ -123,7 +125,7 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   - 12–24 V 端子 → 保險絲 → 反接保護 → 每顆驅動器各自的大電容；
   - 5 V 降壓模組；
   - 2 路限位開關輸入（RC 濾波加上拉電阻）；
-  - 全 THT、手焊，約 80×60 mm。
+  - 全 THT、手焊，約 80×60 mm（已依第 0 節改為 Nucleo-144 與 4 層，尺寸擺完再定）。
 - **完全照 `SKILL.md` 的 Stage 0～6 執行。** 在 CP0、CP1-2、CP4、CP6 一定要停下來等我審查，我就是使用者。
 - 用 `kicad-scripting.md` 描述的生成腳本結構（`build_*`／`place_*`／`route_*`／`validate_*`／`rebuild_*`）。
   **改用檔案後端，不用 SWIG。** 這些腳本是 Phase 3 工具的原型。
@@ -182,3 +184,23 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
 ## 7. 現在請開始
 
 執行 Phase 0。完成後用繁體中文回報環境狀況、確認第 0 節的決策，然後等我確認再進 Phase 1。
+
+## 8. 進度紀錄
+
+### Phase 0 結果（2026-10-29，本機 Windows 10）
+
+- **分支：** `dev/tools-v0.2`，從 `claude/quirky-ride-lo2p11` 開出，不追蹤遠端。
+- **KiCad：** 10.0.3（`C:/Program Files/KiCad/10.0`），編譯時 `KICAD_IPC_API=ON`。
+  附帶 Python 3.11.5，SWIG `pcbnew` 仍可載入（舊腳本能跑）。
+- **kicad-cli：** `pcb drc` 和 `sch erc` 都支援 `--format json`；`pcb drc` 有 `--schematic-parity`、`--refill-zones`。
+- **系統 Python：** 3.10.8。`pdftoppm`（Poppler 25.07）在 PATH 上，PNG 預覽可用。
+- **kicad-python：** PyPI 最新是 **0.8.0**（不是 §3 寫的 0.4.0），依賴 protobuf、pynng、jsonschema。
+  在暫存 venv 安裝成功。它是對 KiCad 10.0.6 編的：`flip_items`、`get_layer_by_name` 等方法要 10.0.6 才有，
+  `get_items_by_net`、`get_groups` 要 10.0.1。`kipy.schematic` 在 0.8.0 匯入會失敗（`PageSettings` 匯入錯誤），
+  跟「KiCad 10 沒有原理圖指令」一致。`board_jobs`（輸出設定）有型別，但 `Board` 沒有對應方法。
+  → Phase 4 前建議把 KiCad 升到 10.0.6。
+- **IPC API server：** 目前關閉（`%APPDATA%/kicad/10.0/kicad_common.json` 的 `api.enable_server: false`）。
+  Phase 4 前要在 KiCad 偏好設定裡打開，確切位置屆時再確認。
+- **Footprint 庫：** 有 `Module:Pololu_Breakout-16_15.2x20.3mm`、`RaspberryPi_Pico_Common_THT`、`Arduino_Nano`；
+  沒有 Nucleo-144 的 footprint。MKS TMC2209 V2.0 是 18 腳，`Pololu_Breakout-16` 不夠用，要自建。
+- **測試：** 15 個測試在系統 Python 3.10 與 KiCad Python 3.11 都通過。
