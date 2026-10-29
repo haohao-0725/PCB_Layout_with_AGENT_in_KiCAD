@@ -269,3 +269,12 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   由使用者在 GitHub 上設定（步驟見 `docs/RELEASING.md`）。
 - 待使用者：CP4 實物比對、量 LM2596 與 470 µF；KiCad 升到 10.0.6、開 API server 後實測即時模式；
   決定是否 push 分支、開 PR、發佈 PyPI。
+
+### 2026-10-30 收尾
+
+- 使用者以 1:1 列印比對，位置都正確（CP4 = Yes）。手邊 470 µF 實測 Ø7 mm，耐壓多半不夠 24 V，範例維持 50 V／Ø10 規格。
+- 這塊板不下單（CP6 = No），範例只用來示範與增強 MCP 工具。
+- MCP 設定從根目錄 `.mcp.json` 移到 `plugin.json`（根目錄的會被當成專案設定讀取而啟動失敗）。
+- 使用者同意公開 prpr 的模組實測尺寸（TMC2209、AM26LS32、Nucleo F446ZE 等）與 README 的 lint 對比數字。
+- 使用者同意合併回 main 並推上 GitHub；plugin 以使用者層級 settings.json 安裝（GitHub marketplace）。
+- 即時模式（IPC）尚未實測，需使用者開啟 KiCad API server。

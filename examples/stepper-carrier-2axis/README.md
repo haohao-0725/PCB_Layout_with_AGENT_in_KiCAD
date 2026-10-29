@@ -17,8 +17,9 @@
 | 整齊度 lint（預設 T、4L-S1 layer plan） | 全部 pass：每 mm 0.10 段、每 10 mm 0.41 個轉折、0 條斜角線段 | CAD 已檢查 |
 | 壓降／溫升 | VM 最遠 64 mV、+5V 33 mV、最熱一段 ΔT 4.7 °C | 估算（IPC-2221，只算走線） |
 | 製造檔回讀 | 126 × 146 mm、4 層、222 PTH、4 NPTH，與板子一致 | CAD 已檢查 |
-| 1:1 實物比對（CP4） | **還沒做** | 需要實板／實物驗證 |
-| LM2596 模組焊盤位置 | **假設值**，待量測 | 需要實物驗證 |
+| 1:1 實物比對（CP4） | 位置都正確（使用者，2026-10-30） | 實物比對 |
+| LM2596 模組焊盤位置 | 1:1 列印比對位置正確；封裝尺寸原本是典型值 | 實物比對 |
+| 下單 | 不下單：這塊板只用來示範工具 | — |
 
 整齊度報告：[reports/lint.md](reports/lint.md)。決策紀錄：[PCB_DECISIONS.md](PCB_DECISIONS.md)。
 專案簡報：[PROJECT_BRIEF.md](PROJECT_BRIEF.md)。下單規格：[ORDER_SPEC.md](ORDER_SPEC.md)。

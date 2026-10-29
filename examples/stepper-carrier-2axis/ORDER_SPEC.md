@@ -1,7 +1,7 @@
 # 下單規格：stepper_carrier rev A（JLCPCB）
 
 所有數值取自實際板子與 `reports/readback.md`，不是沿用別塊板子。
-**agent 不會上傳、下單或付款。** 下單前必須先完成 CP4（1:1 列印實物比對、量好 LM2596 模組）。
+**agent 不會上傳、下單或付款。** 這塊板目前不下單（只用來示範工具）；CP4 已於 2026-10-30 完成。
 
 ## 1. 規格表
 
@@ -59,10 +59,10 @@
 
 ## 4. 下單前的檢查清單
 
-- [ ] CP4：列印 `review/stepper_carrier_fit_check_1to1_A4.pdf`（實際大小／100 %），先量板框 126 × 146 mm。
-- [ ] 把 Nucleo、兩個 TMC2209 模組、端子台、保險絲座放上去核對孔位。
-- [ ] 量 LM2596 模組的 4 個焊盤位置，和封裝 `LM2596_Module_43x21mm` 比對（目前是假設值）。
-- [ ] 量 470 µF 電容直徑（封裝是 Ø10 mm）。
+- [x] CP4：列印 `review/stepper_carrier_fit_check_1to1_A4.pdf`（實際大小／100 %），先量板框 126 × 146 mm。
+- [x] 把 Nucleo、兩個 TMC2209 模組、端子台、保險絲座放上去核對孔位。
+- [x] LM2596 模組：1:1 列印比對位置正確（2026-10-30）。
+- [x] 470 µF 電容：手邊的是 Ø7 mm，耐壓多半不夠 24 V；要用 50 V 品（約 Ø10 mm，與封裝相符）。
 - [ ] 若有修改：執行 `rebuild_stepper_carrier.py`，再用 `compare_gerbers.py` 比對新舊製造包。
 - [ ] 下單、付款由使用者自己進行。
 - [ ] 收到板子後依 [BRINGUP.md](BRINGUP.md) 組裝、上電並記錄量測值。
