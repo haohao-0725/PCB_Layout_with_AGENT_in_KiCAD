@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gerberlib import Excellon, Gerber, kind_of, read_bundle  # noqa: E402
+from gerberlib import Excellon, Gerber, kind_of, read_bundle, utf8_stdout  # noqa: E402
 
 
 def geometry(text: str):
@@ -34,6 +34,7 @@ def geometry(text: str):
 
 
 def main(argv: list[str]) -> int:
+    utf8_stdout()
     if len(argv) != 3:
         print(__doc__)
         return 2

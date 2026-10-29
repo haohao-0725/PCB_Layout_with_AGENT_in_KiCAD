@@ -1,0 +1,84 @@
+[
+ {
+  "tool": "kcp tracedrop",
+  "net": "VM",
+  "source": "D1.1",
+  "total_load_a": 2.3,
+  "tracks_mm": {
+   "B.Cu": 143.5
+  },
+  "copper_um": {
+   "outer": 35.0,
+   "inner": 17.5
+  },
+  "rho_ohm_m": 1.8595064000000003e-08,
+  "temp_c": 40.0,
+  "loads": [
+   {
+    "load": "A1.16",
+    "amps": 1.0,
+    "path_mohm": 27.45,
+    "drop_mv": 49.7,
+    "max_dt_c": 4.7
+   },
+   {
+    "load": "A2.16",
+    "amps": 1.0,
+    "path_mohm": 41.84,
+    "drop_mv": 64.1,
+    "max_dt_c": 4.7
+   },
+   {
+    "load": "U1.1",
+    "amps": 0.3,
+    "path_mohm": 5.49,
+    "drop_mv": 9.8,
+    "max_dt_c": 4.7
+   }
+  ],
+  "hottest": {
+   "layer": "B.Cu",
+   "width_mm": 1.5,
+   "thick_um": 35.0,
+   "amps": 2.3,
+   "dt_c": 4.7
+  },
+  "dt_limit_c": 20.0,
+  "above_limit": false,
+  "method": "IPC-2221 track rise; tracks only (no pours, pads or connectors); estimate"
+ },
+ {
+  "tool": "kcp tracedrop",
+  "net": "+5V",
+  "source": "U1.3",
+  "total_load_a": 0.5,
+  "tracks_mm": {
+   "F.Cu": 61.4
+  },
+  "copper_um": {
+   "outer": 35.0,
+   "inner": 17.5
+  },
+  "rho_ohm_m": 1.8595064000000003e-08,
+  "temp_c": 40.0,
+  "loads": [
+   {
+    "load": "CN11.6",
+    "amps": 0.5,
+    "path_mohm": 65.26,
+    "drop_mv": 32.6,
+    "max_dt_c": 0.9
+   }
+  ],
+  "hottest": {
+   "layer": "F.Cu",
+   "width_mm": 0.5,
+   "thick_um": 35.0,
+   "amps": 0.5,
+   "dt_c": 0.9
+  },
+  "dt_limit_c": 20.0,
+  "above_limit": false,
+  "method": "IPC-2221 track rise; tracks only (no pours, pads or connectors); estimate"
+ }
+]

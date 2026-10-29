@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gerberlib import Excellon, Gerber, kind_of, read_bundle  # noqa: E402
+from gerberlib import Excellon, Gerber, kind_of, read_bundle, utf8_stdout  # noqa: E402
 
 
 def main() -> int:
@@ -37,6 +37,7 @@ def main() -> int:
     parser.add_argument("--tolerance", type=float, default=0.05, help="size tolerance in mm (default 0.05)")
     parser.add_argument("--markdown", action="store_true")
     args = parser.parse_args()
+    utf8_stdout()
 
     files = read_bundle(args.bundle)
     problems: list[str] = []

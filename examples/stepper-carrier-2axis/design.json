@@ -1,0 +1,564 @@
+{
+ "project": "stepper_carrier",
+ "revision": "A",
+ "date": "2026-10-29",
+ "parts": [
+  {
+   "ref": "J1",
+   "value": "VIN 12-24V",
+   "footprint": "stepper_carrier:Terminal_5.08mm_2P",
+   "pins": {
+    "1": "VIN_RAW",
+    "2": "GND"
+   },
+   "fields": {
+    "Silk": "12-24V IN",
+    "Description": "5.08 mm screw terminal, 1 = +"
+   },
+   "group": "power"
+  },
+  {
+   "ref": "F1",
+   "value": "3A slow",
+   "footprint": "stepper_carrier:Fuseholder_5x20mm_P23.25mm",
+   "pins": {
+    "1": "VIN_RAW",
+    "2": "VIN_FUSED"
+   },
+   "fields": {
+    "Silk": "FUSE",
+    "Description": "5x20 mm fuse holder; size the fuse for the measured supply current"
+   },
+   "group": "power"
+  },
+  {
+   "ref": "D1",
+   "value": "SB560",
+   "footprint": "Diode_THT:D_DO-201AD_P5.08mm_Vertical_AnodeUp",
+   "pins": {
+    "1": "VM",
+    "2": "VIN_FUSED"
+   },
+   "fields": {
+    "Description": "Series reverse-polarity protection, 5 A 60 V Schottky (1N5822 also fits)"
+   },
+   "group": "power"
+  },
+  {
+   "ref": "U1",
+   "value": "LM2596 module 5V",
+   "footprint": "stepper_carrier:LM2596_Module_43x21mm",
+   "pins": {
+    "1": "VM",
+    "2": "GND",
+    "3": "+5V",
+    "4": "GND"
+   },
+   "fields": {
+    "Silk": "5V BUCK",
+    "Description": "Adjust to 5.0 V before fitting the Nucleo"
+   },
+   "group": "power"
+  },
+  {
+   "ref": "A1",
+   "value": "MKS TMC2209 V2.0",
+   "footprint": "stepper_carrier:MKS_TMC2209_V2_Sockets_18P",
+   "pins": {
+    "1": "X_DIR",
+    "2": "X_STEP",
+    "3": null,
+    "4": "GND",
+    "5": null,
+    "6": "GND",
+    "7": "GND",
+    "8": "X_EN_N",
+    "9": "GND",
+    "10": "+3V3",
+    "11": "X_1B",
+    "12": "X_1A",
+    "13": "X_2A",
+    "14": "X_2B",
+    "15": "GND",
+    "16": "VM",
+    "17": null,
+    "18": null
+   },
+   "fields": {
+    "Silk": "DRIVER X",
+    "Description": "Socketed module; set motor current with its VREF pot"
+   },
+   "group": "axis X"
+  },
+  {
+   "ref": "C1",
+   "value": "470uF 50V",
+   "footprint": "Capacitor_THT:CP_Radial_D10.0mm_P5.00mm",
+   "pins": {
+    "1": "VM",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Driver X bulk, low ESR, >= 50 V; sized for braking energy (PCB_DECISIONS C6)"
+   },
+   "group": "axis X"
+  },
+  {
+   "ref": "C2",
+   "value": "100nF 50V",
+   "footprint": "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm",
+   "pins": {
+    "1": "VM",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Driver X VM decoupling"
+   },
+   "group": "axis X"
+  },
+  {
+   "ref": "R1",
+   "value": "10k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "X_EN_N",
+    "2": "+3V3"
+   },
+   "fields": {
+    "Description": "Driver X disabled until the MCU pulls EN low"
+   },
+   "group": "axis X"
+  },
+  {
+   "ref": "J2",
+   "value": "MOTOR X",
+   "footprint": "stepper_carrier:Terminal_5.08mm_4P",
+   "pins": {
+    "1": "X_1B",
+    "2": "X_1A",
+    "3": "X_2A",
+    "4": "X_2B"
+   },
+   "fields": {
+    "Silk": "MOTOR X",
+    "Description": "Two joined 2P 5.08 mm terminals: 1B 1A 2A 2B"
+   },
+   "group": "axis X"
+  },
+  {
+   "ref": "A2",
+   "value": "MKS TMC2209 V2.0",
+   "footprint": "stepper_carrier:MKS_TMC2209_V2_Sockets_18P",
+   "pins": {
+    "1": "Y_DIR",
+    "2": "Y_STEP",
+    "3": null,
+    "4": "GND",
+    "5": null,
+    "6": "GND",
+    "7": "GND",
+    "8": "Y_EN_N",
+    "9": "GND",
+    "10": "+3V3",
+    "11": "Y_1B",
+    "12": "Y_1A",
+    "13": "Y_2A",
+    "14": "Y_2B",
+    "15": "GND",
+    "16": "VM",
+    "17": null,
+    "18": null
+   },
+   "fields": {
+    "Silk": "DRIVER Y",
+    "Description": "Socketed module; set motor current with its VREF pot"
+   },
+   "group": "axis Y"
+  },
+  {
+   "ref": "C3",
+   "value": "470uF 50V",
+   "footprint": "Capacitor_THT:CP_Radial_D10.0mm_P5.00mm",
+   "pins": {
+    "1": "VM",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Driver Y bulk, low ESR, >= 50 V; sized for braking energy (PCB_DECISIONS C6)"
+   },
+   "group": "axis Y"
+  },
+  {
+   "ref": "C4",
+   "value": "100nF 50V",
+   "footprint": "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm",
+   "pins": {
+    "1": "VM",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Driver Y VM decoupling"
+   },
+   "group": "axis Y"
+  },
+  {
+   "ref": "R2",
+   "value": "10k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "Y_EN_N",
+    "2": "+3V3"
+   },
+   "fields": {
+    "Description": "Driver Y disabled until the MCU pulls EN low"
+   },
+   "group": "axis Y"
+  },
+  {
+   "ref": "J3",
+   "value": "MOTOR Y",
+   "footprint": "stepper_carrier:Terminal_5.08mm_4P",
+   "pins": {
+    "1": "Y_1B",
+    "2": "Y_1A",
+    "3": "Y_2A",
+    "4": "Y_2B"
+   },
+   "fields": {
+    "Silk": "MOTOR Y",
+    "Description": "Two joined 2P 5.08 mm terminals: 1B 1A 2A 2B"
+   },
+   "group": "axis Y"
+  },
+  {
+   "ref": "J4",
+   "value": "LIMIT X",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_X_IN",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Normally-open limit switch to GND"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "R3",
+   "value": "10k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_X",
+    "2": "+3V3"
+   },
+   "fields": {
+    "Description": "Limit X pull-up (MCU side)"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "R5",
+   "value": "1k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_X_IN",
+    "2": "LIM_X"
+   },
+   "fields": {
+    "Description": "Limit X RC filter"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "C5",
+   "value": "10nF",
+   "footprint": "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm",
+   "pins": {
+    "1": "LIM_X",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Limit X RC filter, ~10 us"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "J5",
+   "value": "LIMIT Y",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_Y_IN",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Normally-open limit switch to GND"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "R4",
+   "value": "10k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_Y",
+    "2": "+3V3"
+   },
+   "fields": {
+    "Description": "Limit Y pull-up (MCU side)"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "R6",
+   "value": "1k",
+   "footprint": "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
+   "pins": {
+    "1": "LIM_Y_IN",
+    "2": "LIM_Y"
+   },
+   "fields": {
+    "Description": "Limit Y RC filter"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "C6",
+   "value": "10nF",
+   "footprint": "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm",
+   "pins": {
+    "1": "LIM_Y",
+    "2": "GND"
+   },
+   "fields": {
+    "Description": "Limit Y RC filter, ~10 us"
+   },
+   "group": "limits"
+  },
+  {
+   "ref": "CN11",
+   "value": "NUCLEO-F446ZE CN11 socket 2x35",
+   "footprint": "stepper_carrier:Morpho_2x35_P2.54mm_TopView",
+   "pins": {
+    "1": null,
+    "2": null,
+    "3": null,
+    "4": null,
+    "5": null,
+    "6": "+5V",
+    "7": null,
+    "8": "GND",
+    "9": "X_DIR",
+    "10": null,
+    "11": "X_STEP",
+    "12": null,
+    "13": null,
+    "14": null,
+    "15": null,
+    "16": "+3V3",
+    "17": null,
+    "18": null,
+    "19": "GND",
+    "20": "GND",
+    "21": null,
+    "22": "GND",
+    "23": null,
+    "24": null,
+    "25": null,
+    "26": null,
+    "27": null,
+    "28": "X_EN_N",
+    "29": null,
+    "30": null,
+    "31": null,
+    "32": null,
+    "33": null,
+    "34": null,
+    "35": null,
+    "36": null,
+    "37": null,
+    "38": null,
+    "39": null,
+    "40": null,
+    "41": "Y_DIR",
+    "42": null,
+    "43": "Y_STEP",
+    "44": null,
+    "45": null,
+    "46": null,
+    "47": null,
+    "48": null,
+    "49": "GND",
+    "50": null,
+    "51": null,
+    "52": null,
+    "53": null,
+    "54": null,
+    "55": null,
+    "56": "Y_EN_N",
+    "57": null,
+    "58": null,
+    "59": null,
+    "60": "GND",
+    "61": null,
+    "62": null,
+    "63": null,
+    "64": null,
+    "65": "LIM_X",
+    "66": null,
+    "67": null,
+    "68": null,
+    "69": null,
+    "70": "LIM_Y"
+   },
+   "fields": {
+    "Silk": "NUCLEO CN11",
+    "Description": "2x35 female header, >= 8.5 mm"
+   },
+   "group": "nucleo"
+  },
+  {
+   "ref": "CN12",
+   "value": "NUCLEO-F446ZE CN12 socket 2x35",
+   "footprint": "stepper_carrier:Morpho_2x35_P2.54mm_TopView",
+   "pins": {
+    "1": null,
+    "2": null,
+    "3": null,
+    "4": null,
+    "5": null,
+    "6": null,
+    "7": null,
+    "8": null,
+    "9": "GND",
+    "10": null,
+    "11": null,
+    "12": null,
+    "13": null,
+    "14": null,
+    "15": null,
+    "16": null,
+    "17": null,
+    "18": null,
+    "19": null,
+    "20": "GND",
+    "21": null,
+    "22": null,
+    "23": null,
+    "24": null,
+    "25": null,
+    "26": null,
+    "27": null,
+    "28": null,
+    "29": null,
+    "30": null,
+    "31": null,
+    "32": null,
+    "33": null,
+    "34": null,
+    "35": null,
+    "36": null,
+    "37": null,
+    "38": null,
+    "39": "GND",
+    "40": null,
+    "41": null,
+    "42": null,
+    "43": null,
+    "44": null,
+    "45": null,
+    "46": null,
+    "47": null,
+    "48": null,
+    "49": null,
+    "50": null,
+    "51": null,
+    "52": null,
+    "53": null,
+    "54": "GND",
+    "55": null,
+    "56": null,
+    "57": null,
+    "58": null,
+    "59": null,
+    "60": null,
+    "61": null,
+    "62": null,
+    "63": "GND",
+    "64": null,
+    "65": null,
+    "66": null,
+    "67": null,
+    "68": null,
+    "69": null,
+    "70": null
+   },
+   "fields": {
+    "Silk": "NUCLEO CN12",
+    "Description": "2x35 female header, >= 8.5 mm"
+   },
+   "group": "nucleo"
+  }
+ ],
+ "board_only": {
+  "H1": {
+   "footprint": "MountingHole:MountingHole_3.2mm_M3",
+   "at": [
+    3.5,
+    3.5
+   ]
+  },
+  "H2": {
+   "footprint": "MountingHole:MountingHole_3.2mm_M3",
+   "at": [
+    122.5,
+    3.5
+   ]
+  },
+  "H3": {
+   "footprint": "MountingHole:MountingHole_3.2mm_M3",
+   "at": [
+    3.5,
+    142.5
+   ]
+  },
+  "H4": {
+   "footprint": "MountingHole:MountingHole_3.2mm_M3",
+   "at": [
+    122.5,
+    142.5
+   ]
+  }
+ },
+ "netclasses": [
+  {
+   "name": "Supply",
+   "width": 1.5,
+   "clearance": 0.3,
+   "patterns": [
+    "VIN_RAW",
+    "VIN_FUSED",
+    "VM"
+   ]
+  },
+  {
+   "name": "Motor",
+   "width": 1.0,
+   "clearance": 0.3,
+   "patterns": [
+    "*_1A",
+    "*_1B",
+    "*_2A",
+    "*_2B"
+   ]
+  },
+  {
+   "name": "LogicPower",
+   "width": 0.5,
+   "clearance": 0.2,
+   "patterns": [
+    "+5V",
+    "+3V3"
+   ]
+  }
+ ]
+}

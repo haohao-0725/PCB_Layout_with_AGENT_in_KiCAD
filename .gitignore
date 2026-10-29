@@ -7,3 +7,10 @@ previews/
 build/
 dist/
 *.egg-info/
+# KiCad per-user and temporary files
+*.kicad_prl
+fp-info-cache
+~*.lck
+*-backups/
+# loose Gerber folders; the zip is the deliverable
+examples/*/fab/gerber/

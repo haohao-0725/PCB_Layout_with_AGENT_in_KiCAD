@@ -218,3 +218,15 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   「小折線」只算 S 形（轉過去再轉回來），寬線的 45° 倒角不算；signal via 上限以每條 pad 對 pad 連線計算。
 - **測試：** 47 個測試（原有 15 個＋新增 32 個），系統 Python 3.10 與 KiCad Python 3.11 都通過。
   `tests/fixtures/lint_demo.kicad_pcb` 是手寫的 4 層小板，KiCad DRC 只報出刻意放的問題（懸空線、孤立鋪銅、絲印壓 pad）。
+
+### Phase 2 結果（2026-10-29）
+
+- 使用者 2026-10-29 指示「後面的 Phase 都直接依序執行完成」：Part B／C 由 agent 代填並標註「代填」；
+  CP4（1:1 實物比對、LM2596 量測）與 CP6 標為 No，等使用者實物確認。
+- `examples/stepper-carrier-2axis/`：126 × 146 mm、4L-S1、全 THT。`rebuild_stepper_carrier.py` 一次跑完，約 15 秒。
+  ERC 0／0、netlist 與接線規劃一致、DRC 0、未連線 0、parity 0、via 0、lint（T）全 pass、回讀 PASS。
+- 為了範例新增的 kcp 模組（Phase 3 再補 CLI 與測試）：`footprints`（從庫載入並放置）、`wiring`（接線規劃 →
+  原理圖、讀回 KiCad netlist）、`board`（直接建板）、`route`（只准 0/45/90°、寫入前檢查間距）、`place`
+  （移動、排列、fit check）、`previews`、`tracedrop`。
+- 範例過程發現並修正：`kcp drc` 在暫存複本上跑時沒有帶 fp-lib-table；`gerber_readback.py` 在 cp950 主控台印 Ø 會當掉。
+- C6 估算發現：每顆驅動器 100 µF 時，兩軸同時煞車可把 24 V 母線推到約 28 V（TMC2209 上限 29 V），改為 470 µF。

@@ -1,0 +1,11 @@
+net VM: tracks B.Cu 144 mm; copper outer 35.0 um / inner 17.5 um; rho 1.860e-08 ohm*m (40 C); total load 2.300 A
+load               path mOhm  drop mV  max dT C
+A1.16                   27.4     49.7       4.7
+A2.16                   41.8     64.1       4.7
+U1.1                     5.5      9.8       4.7
+hottest segment: B.Cu 1.50 mm, 35 um, 2.30 A -> dT 4.7 C (IPC-2221, limit 20 C)
+
+net +5V: tracks F.Cu 61 mm; copper outer 35.0 um / inner 17.5 um; rho 1.860e-08 ohm*m (40 C); total load 0.500 A
+load               path mOhm  drop mV  max dT C
+CN11.6                  65.3     32.6       0.9
+hottest segment: F.Cu 0.50 mm, 35 um, 0.50 A -> dT 0.9 C (IPC-2221, limit 20 C)

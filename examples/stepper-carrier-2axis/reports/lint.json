@@ -1,0 +1,460 @@
+{
+ "tool": "kcp lint",
+ "file": "Z:\\VScode\\PCB_Layout_with_AGENT_in_KiCAD\\examples\\stepper-carrier-2axis\\stepper_carrier.kicad_pcb",
+ "preset": "T",
+ "preset_name": "Tidy & readable",
+ "thresholds_file": "Z:\\VScode\\PCB_Layout_with_AGENT_in_KiCAD\\skills\\kicad-clean-pcb\\kcp\\presets\\lint.json",
+ "layer_plan": {
+  "F.Cu": "horizontal",
+  "In1.Cu": "plane",
+  "In2.Cu": "plane",
+  "B.Cu": "vertical"
+ },
+ "status": "pass",
+ "summary": {
+  "info": 8,
+  "pass": 12,
+  "skip": 1
+ },
+ "metrics": [
+  {
+   "id": "segments_total",
+   "label": "Track segments (incl. arcs)",
+   "value": 78,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "track_length_mm",
+   "label": "Total track length",
+   "value": 752.8,
+   "unit": "mm",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "segments_per_mm",
+   "label": "Segments per mm of track",
+   "value": 0.1036,
+   "unit": "1/mm",
+   "target": "≤ 0.15 (warn ≤ 0.3)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "max_segments_per_connection",
+   "label": "Worst net: segments per pad-to-pad connection",
+   "value": 3.0,
+   "unit": "",
+   "target": "≤ 10 (warn ≤ 20)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "off_angle_segments",
+   "label": "Segments not at 0/45/90°",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 3)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "arcs",
+   "label": "Arc tracks",
+   "value": 0,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "turns_per_10mm",
+   "label": "Turns per 10 mm of track (zigzag)",
+   "value": 0.412,
+   "unit": "1/10mm",
+   "target": "≤ 1 (warn ≤ 2)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "jogs",
+   "label": "Short S-bend jogs (< 2 × width)",
+   "value": 4,
+   "unit": "",
+   "target": "≤ 5 (warn ≤ 25)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "collinear_joints",
+   "label": "Collinear joints (segments that could be merged)",
+   "value": 0,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "vias_total",
+   "label": "Vias",
+   "value": 0,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "power_net_vias",
+   "label": "Vias on power / high-current nets",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 2)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "ground_net_vias",
+   "label": "Vias on GND nets",
+   "value": 0,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "signal_nets_over_via_limit",
+   "label": "Signal nets above the via limit (per connection)",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 3)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "direction_conformity_min_pct",
+   "label": "Lowest layer main-direction conformity",
+   "value": 78.7,
+   "unit": "%",
+   "target": "≥ 75 (warn ≥ 60)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "plane_layer_tracks",
+   "label": "Tracks on GND plane layers",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 0)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "zones_total",
+   "label": "Copper zones",
+   "value": 2,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  },
+  {
+   "id": "non_ground_zones",
+   "label": "Zones on nets other than GND",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 0)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "dangling_ends",
+   "label": "Dangling track ends",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 0)",
+   "status": "pass",
+   "note": ""
+  },
+  {
+   "id": "silk_over_pads",
+   "label": "Silkscreen over pads (approx.)",
+   "value": 0,
+   "unit": "",
+   "target": "≤ 0 (warn ≤ 5)",
+   "status": "pass",
+   "note": "text boxes are estimated from the font size"
+  },
+  {
+   "id": "row_misalignment_max_mm",
+   "label": "Worst part-row misalignment",
+   "value": null,
+   "unit": "mm",
+   "target": "",
+   "status": "skip",
+   "note": ""
+  },
+  {
+   "id": "misaligned_rows",
+   "label": "Misaligned part rows",
+   "value": 0,
+   "unit": "",
+   "target": "",
+   "status": "info",
+   "note": ""
+  }
+ ],
+ "details": {
+  "segments_per_net": [
+   {
+    "net": "X_1B",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 26.6,
+    "per_connection": 3.0
+   },
+   {
+    "net": "X_1A",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 25.5,
+    "per_connection": 3.0
+   },
+   {
+    "net": "X_2A",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 25.5,
+    "per_connection": 3.0
+   },
+   {
+    "net": "X_2B",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 26.6,
+    "per_connection": 3.0
+   },
+   {
+    "net": "Y_EN_N",
+    "segments": 6,
+    "pads": 3,
+    "length_mm": 22.7,
+    "per_connection": 3.0
+   },
+   {
+    "net": "Y_1B",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 26.6,
+    "per_connection": 3.0
+   },
+   {
+    "net": "Y_1A",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 25.5,
+    "per_connection": 3.0
+   },
+   {
+    "net": "Y_2A",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 25.5,
+    "per_connection": 3.0
+   },
+   {
+    "net": "Y_2B",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 26.6,
+    "per_connection": 3.0
+   },
+   {
+    "net": "+5V",
+    "segments": 3,
+    "pads": 2,
+    "length_mm": 61.4,
+    "per_connection": 3.0
+   }
+  ],
+  "off_angle": [],
+  "zigzag_nets": [
+   {
+    "net": "Y_EN_N",
+    "turns": 3,
+    "length_mm": 22.7,
+    "turns_per_10mm": 1.32
+   },
+   {
+    "net": "X_EN_N",
+    "turns": 2,
+    "length_mm": 23.8,
+    "turns_per_10mm": 0.84
+   },
+   {
+    "net": "X_1A",
+    "turns": 2,
+    "length_mm": 25.5,
+    "turns_per_10mm": 0.78
+   },
+   {
+    "net": "X_2A",
+    "turns": 2,
+    "length_mm": 25.5,
+    "turns_per_10mm": 0.78
+   },
+   {
+    "net": "Y_1A",
+    "turns": 2,
+    "length_mm": 25.5,
+    "turns_per_10mm": 0.78
+   },
+   {
+    "net": "Y_2A",
+    "turns": 2,
+    "length_mm": 25.5,
+    "turns_per_10mm": 0.78
+   },
+   {
+    "net": "X_1B",
+    "turns": 2,
+    "length_mm": 26.6,
+    "turns_per_10mm": 0.75
+   },
+   {
+    "net": "X_2B",
+    "turns": 2,
+    "length_mm": 26.6,
+    "turns_per_10mm": 0.75
+   },
+   {
+    "net": "Y_1B",
+    "turns": 2,
+    "length_mm": 26.6,
+    "turns_per_10mm": 0.75
+   },
+   {
+    "net": "Y_2B",
+    "turns": 2,
+    "length_mm": 26.6,
+    "turns_per_10mm": 0.75
+   }
+  ],
+  "jogs": [
+   {
+    "net": "X_1A",
+    "layer": "F.Cu",
+    "start": [
+     20.0,
+     56.05
+    ],
+    "end": [
+     18.73,
+     54.78
+    ],
+    "length_mm": 1.796,
+    "width_mm": 1.0
+   },
+   {
+    "net": "X_2A",
+    "layer": "F.Cu",
+    "start": [
+     20.0,
+     58.59
+    ],
+    "end": [
+     18.73,
+     59.86
+    ],
+    "length_mm": 1.796,
+    "width_mm": 1.0
+   },
+   {
+    "net": "Y_1A",
+    "layer": "F.Cu",
+    "start": [
+     20.0,
+     96.69
+    ],
+    "end": [
+     18.73,
+     95.42
+    ],
+    "length_mm": 1.796,
+    "width_mm": 1.0
+   },
+   {
+    "net": "Y_2A",
+    "layer": "F.Cu",
+    "start": [
+     20.0,
+     99.23
+    ],
+    "end": [
+     18.73,
+     100.5
+    ],
+    "length_mm": 1.796,
+    "width_mm": 1.0
+   }
+  ],
+  "vias_by_net": [],
+  "signal_nets_over_via_limit": [],
+  "layers": {
+   "F.Cu": {
+    "horizontal": 446.9,
+    "vertical": 18.3,
+    "diagonal": 64.7,
+    "other": 0.0,
+    "conformity_pct": 84.3,
+    "total_mm": 529.8,
+    "role": "horizontal"
+   },
+   "B.Cu": {
+    "horizontal": 42.9,
+    "vertical": 175.4,
+    "diagonal": 4.6,
+    "other": 0.0,
+    "conformity_pct": 78.7,
+    "total_mm": 223.0,
+    "role": "vertical"
+   }
+  },
+  "plane_layers": {
+   "layers": [
+    "In1.Cu",
+    "In2.Cu"
+   ],
+   "source": "layer plan",
+   "tracks": 0,
+   "length_mm": 0,
+   "nets": {}
+  },
+  "zones": [
+   {
+    "net": "GND",
+    "layers": [
+     "In1.Cu"
+    ],
+    "name": "GND In1.Cu",
+    "role": "ground",
+    "filled_area_mm2": 17085.6
+   },
+   {
+    "net": "GND",
+    "layers": [
+     "In2.Cu"
+    ],
+    "name": "GND In2.Cu",
+    "role": "ground",
+    "filled_area_mm2": 17085.6
+   }
+  ],
+  "dangling": [],
+  "silk_over_pads": [],
+  "rows": []
+ }
+}

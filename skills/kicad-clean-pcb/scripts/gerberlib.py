@@ -16,12 +16,23 @@ from __future__ import annotations
 import collections
 import math
 import re
+import sys
 import zipfile
 from pathlib import Path
 
 NM_PER_MM = 1_000_000
 NM_PER_INCH = 25_400_000
 SKIP_SUFFIXES = (".txt", ".md", ".json", ".csv", ".pdf", ".png", ".jpg", ".html", ".rpt", ".pos")
+
+
+def utf8_stdout() -> None:
+    """Windows consoles default to a legacy code page; print UTF-8 (e.g. the diameter sign) anyway."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
 
 
 # ---------------------------------------------------------------- archive helpers

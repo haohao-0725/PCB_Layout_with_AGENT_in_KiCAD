@@ -72,6 +72,13 @@ def _copy_project(board: Path, folder: Path) -> Path:
         side = board.with_suffix(suffix)
         if side.is_file():
             shutil.copy2(side, folder / side.name)
+    # Project library tables point at ${KIPRJMOD}; point the copies back at the real project.
+    project = board.parent.resolve().as_posix()
+    for table in ("fp-lib-table", "sym-lib-table"):
+        source = board.parent / table
+        if source.is_file():
+            text = source.read_text(encoding="utf-8").replace("${KIPRJMOD}", project)
+            (folder / table).write_text(text, encoding="utf-8")
     return target
 
 
