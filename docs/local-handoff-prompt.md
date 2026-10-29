@@ -204,3 +204,17 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
 - **Footprint 庫：** 有 `Module:Pololu_Breakout-16_15.2x20.3mm`、`RaspberryPi_Pico_Common_THT`、`Arduino_Nano`；
   沒有 Nucleo-144 的 footprint。MKS TMC2209 V2.0 是 18 腳，`Pololu_Breakout-16` 不夠用，要自建。
 - **測試：** 15 個測試在系統 Python 3.10 與 KiCad Python 3.11 都通過。
+
+### Phase 1 結果（2026-10-29）
+
+- **套件：** `skills/kicad-clean-pcb/kcp/`，只用標準函式庫（vermin 檢查最低 3.7，宣告 3.9+）。
+  執行方式 `python <skill>/kcp <指令>`；`pyproject.toml` 可 `pip install`，提供 `kcp` 指令。
+  `inspect` 模組命名為 `inspection.py`，避免蓋掉標準函式庫的 `inspect`；之後的 `trace.py` 也要改名（標準函式庫有 `trace`）。
+- **指令：** `inspect`、`lint`、`decisions`、`drc`、`erc`。輸出 JSON 或 `--markdown`；結束碼 0／1（檢查失敗）／2（無法執行）。
+- **解析驗證（CAD 已檢查）：** 用 KiCad 自己的 pcbnew 比對兩塊真實板子（prpr_carrier DRAFT-03、DRAFT-02），
+  pad 位置、角度、net、文字位置誤差都是 0。文字寬度估算：KiCad 實際約 0.81–1.05 × 字數 × 字寬，取 0.9。
+- **DRC：** kicad-cli 跑大板約 14 秒，所以 `inspect --drc` 是選用。DRC 預設在暫存複本上跑，因為 kicad-cli 會在板子旁產生 `.kicad_prl`。
+- **lint 門檻校正：** DRAFT-03（整理過）整體 warn，只剩 11 個 S 形小折線；DRAFT-02（自動繞線）11 項 fail。
+  「小折線」只算 S 形（轉過去再轉回來），寬線的 45° 倒角不算；signal via 上限以每條 pad 對 pad 連線計算。
+- **測試：** 47 個測試（原有 15 個＋新增 32 個），系統 Python 3.10 與 KiCad Python 3.11 都通過。
+  `tests/fixtures/lint_demo.kicad_pcb` 是手寫的 4 層小板，KiCad DRC 只報出刻意放的問題（懸空線、孤立鋪銅、絲印壓 pad）。

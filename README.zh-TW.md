@@ -45,7 +45,9 @@ agent 第一次用自動放置加格點繞線，DRC 全過，但結果是：
 
   **空白就代表「未同意」。**
 - **參考文件：** 各風格的版面規則；電路原則（附加電路 A–D 分類、額定、反接保護選項、馬達回生能量）；含疊層選項的走線手冊；驗證與下單規格範本；KiCad 10 腳本注意事項；台灣下單注意事項。
-- **四支腳本：** 見下方[腳本](#腳本)。
+- **板子工具（`kcp`）與四支腳本：** 見下方[工具與腳本](#工具與腳本)。`kcp` 直接讀 `.kicad_pcb`，
+  其中的整齊度評分（lint）把「這塊板好不好讀」變成數字：每 mm 線段數、鋸齒轉折、非 0／45／90° 線段、
+  電源 net 上的 via、各層主方向、GND 以外的鋪銅、電阻排對齊。
 
 ## 適不適合你
 
@@ -67,6 +69,7 @@ agent 第一次用自動放置加格點繞線，DRC 全過，但結果是：
 | KiCad | **10.0.x** | `kicad-cli` 參數和 Gerber 檔名會隨版本改變。skill 會先查 `--help`，並用 X2 屬性辨識 Gerber 層別，不靠副檔名 |
 | 作業系統 | Windows 10 | macOS／Linux 應可使用，但文件中的路徑以 Windows 為主，未實測 |
 | 板子腳本的 Python | KiCad 隨附的 Python | `export_previews.py` 與 `trace_drop.py` 使用舊版 SWIG `pcbnew` 介面。KiCad 已宣布棄用、改用 IPC API，並預計在未來的大版本移除；屆時這兩支腳本需要改寫 |
+| `kcp` 工具的 Python | 3.9 以上（只用標準函式庫） | 直接讀 `.kicad_pcb`，不用 `pcbnew`；只有 `kcp drc`／`kcp erc` 會呼叫 `kicad-cli` |
 | Gerber 工具的 Python | 3.8 以上（只用標準函式庫） | `gerber_readback.py` 與 `compare_gerbers.py` 不需要 KiCad |
 | Agent | Claude Code、Codex | 能讀取 `SKILL.md` 資料夾（Agent Skills 格式）的 agent 都應可使用 |
 
@@ -133,7 +136,40 @@ agent 會先做範圍檢查、請你選預設風格，然後在專案裡建立 `
 | 6. 驗證與製造檔 | DRC／parity 歸零、Gerber＋鑽孔＋回讀、下單規格 | ✔ |
 | 7. 收尾 | 單一重建入口、舊檔封存、交接文件 | — |
 
-## 腳本
+## 工具與腳本
+
+### 板子工具：`kcp`
+
+任何 Python 3.9 以上都能跑；除了 `drc`、`erc` 以外不需要 KiCad。每個指令輸出 JSON，加 `--markdown`
+改輸出表格。結束碼 1 代表檢查沒過，2 代表工具無法執行。
+
+| 指令 | 用途 |
+|---|---|
+| `inspect` | 把板子讀成 JSON：板框尺寸、層與疊層、footprint 的位置／角度／正反面／courtyard 與 pad、net 的 netclass 與走線統計、走線／via／鋪銅。加 `--drc` 會附上各 net 的未連線數 |
+| `lint` | 依預設風格（T、C、R）評整齊度，每項給 pass／warn／fail。門檻在 `kcp/presets/lint.json`，要改請複製一份再用 `--thresholds` 指定。給它 layer plan（`examples/layer-plans/`）就會檢查各層主方向 |
+| `decisions` | 列出 `PCB_DECISIONS.md` 的空白列，中英文都可以。`--checkpoint CP2` 在 CP2 需要的項目還有空白時回傳 1 |
+| `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案 |
+
+```bash
+python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
+python skills/kicad-clean-pcb/kcp lint board.kicad_pcb --preset T --layer-plan examples/layer-plans/4L-S1.json --markdown
+python skills/kicad-clean-pcb/kcp decisions PCB_DECISIONS.md --checkpoint CP2
+python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
+```
+
+用這個 skill 起源的那塊板子比較，lint 能清楚分出兩個版本：
+
+| 項目 | 自動繞線草稿 | 重新整理後 |
+|---|---:|---:|
+| 每 mm 走線的線段數 | 1.00 | 0.09 |
+| 每 10 mm 轉折數（鋸齒） | 8.8 | 0.5 |
+| 非 0／45／90° 線段 | 79 | 0 |
+| 電源／相線上的 via | 24 | 0 |
+| GND 以外的鋪銅 | 3 | 0 |
+| 電阻排最大對齊偏差 | 1.35 mm | 0 mm |
+| 結果（T 預設） | 11 項 fail | warn（11 個短 S 形小折線待確認） |
+
+### 腳本
 
 | 腳本 | 用途 | 執行環境 |
 |---|---|---|
@@ -142,11 +178,26 @@ agent 會先做範圍檢查、請你選預設風格，然後在專案裡建立 `
 | `gerber_readback.py` | 從 X2 屬性讀出各層用途與銅層順序、板框尺寸、PTH／NPTH 孔與槽孔數，可比對預期值 | Python 3.8 以上 |
 | `compare_gerbers.py` | 比對兩包 Gerber／鑽孔檔的幾何（直線、圓弧、焊盤、區域、孔、槽孔） | Python 3.8 以上 |
 
-在 Windows 上執行時請設定 `PYTHONUTF8=1`。單元測試（不需要 KiCad）：
+在 Windows 上執行時請設定 `PYTHONUTF8=1`。單元測試（不需要 KiCad；有一個整合測試只在裝了 `kicad-cli` 時執行）：
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## 儲存你的預設值
+
+如果你每次都用同一組偏好開始，可以把填好的 Part A 存成自己的檔案，放在 skill 安裝資料夾**以外**的地方
+（更新 skill 會覆蓋那個資料夾）。可以從
+[`examples/defaults/PCB_PART_A_DEFAULTS.md`](examples/defaults/PCB_PART_A_DEFAULTS.md) 開始改，
+再在全域說明檔（Claude Code 用 `~/.claude/CLAUDE.md`，Codex 用 `AGENTS.md`）裡指向它：
+
+```markdown
+## PCB 工作
+使用 kicad-clean-pcb skill 時，我的 Part A 預設值在 ~/pcb-defaults/PCB_PART_A_DEFAULTS.md。
+每個新專案的 PCB_DECISIONS.md 都先複製它，再請我確認一次。
+```
+
+在 stage 0，agent 會把它複製進專案，只請你確認一次，不必逐項回答。
 
 ## 限制與免責聲明
 

@@ -14,9 +14,10 @@ description: >-
   for RF, high-speed memory, mains-powered or isolated power designs.
 license: MIT
 compatibility: >-
-  KiCad 10.0.x, tested on Windows 10. The bundled board scripts need the Python that ships with
-  KiCad (legacy pcbnew bindings, deprecated by KiCad in favour of the IPC API). The Gerber tools
-  need only Python 3.8+.
+  KiCad 10.0.x, tested on Windows 10. The kcp tools (inspect, lint, decisions, drc, erc) need
+  only Python 3.9+ and read .kicad_pcb files directly; drc/erc call kicad-cli. Two older board
+  scripts still need the Python that ships with KiCad (legacy pcbnew bindings, deprecated by
+  KiCad in favour of the IPC API). The Gerber tools need only Python 3.8+.
 metadata:
   version: "0.1.0"
 ---
@@ -83,6 +84,25 @@ Rules:
 
 Put every open question of a checkpoint in one message as a list, with the recommended option
 for each. Don't drip-feed questions.
+
+## Tools by stage
+
+Use the bundled tools instead of guessing coordinates or counting by eye. Run them as
+`python <skill>/kcp <command> ...` (any Python 3.9+, no KiCad needed except for `drc`/`erc`).
+Each prints JSON, or Markdown with `--markdown`; exit code 1 means the check failed, 2 means the
+tool could not run. Details in [Bundled tools and scripts](#bundled-tools-and-scripts).
+
+| Stage | Call | What it tells you |
+|---|---|---|
+| 0 | `kcp decisions PCB_DECISIONS.md --checkpoint CP0` | Blank scope and Part A rows before asking for CP0 |
+| 2 | `kcp decisions PCB_DECISIONS.md --checkpoint CP2` | Every blank row in Parts B and C; CP2 cannot pass while it exits 1 |
+| 3 | `kcp erc board.kicad_sch` | ERC errors and warnings by type |
+| 4 | `kcp inspect board.kicad_pcb --summary` | Real positions, rotations, courtyards and pad nets: read them, don't recompute them |
+| 4 | `kcp lint board.kicad_pcb --preset <A-preset>` | Part-row alignment and silkscreen over pads before showing the placement |
+| 5 | `kcp drc board.kicad_pcb` and `kcp lint ... --layer-plan plan.json` after each group | New DRC issues, unconnected nets left, zigzags, off-angle segments, vias, tracks on plane layers |
+| 6 | `kcp drc board.kicad_pcb --refill --parity`, final `kcp lint`, `kcp decisions ... --checkpoint CP6` | Native checks at zero, the lint table for the delivery summary, Part C results recorded |
+
+`kcp lint` numbers support the visual review; they never replace it.
 
 ## Stage 0: scope, profile and preferences
 
@@ -156,7 +176,7 @@ is missing and affects the circuit, footprints or fabrication.
 - **Parts B and C.** Fill them in `PCB_DECISIONS.md`. The agent's recommendation follows the
   add-on policy chosen in Part A (circuit-policy.md). Each row states the real problem it
   solves and its cost. The user answers Yes or No for each row. **CP2 passes only when every row
-  is answered.**
+  is answered** (`kcp decisions PCB_DECISIONS.md --checkpoint CP2` lists what is still blank).
 
 ## Stage 3: schematic
 
@@ -222,7 +242,9 @@ print 1:1 again.
 Read [references/routing-playbook.md](references/routing-playbook.md) first.
 
 - **Layer plan.** Write it before routing: stackup from Part A, the use and main direction of
-  each layer, and the width and clearance of each net group.
+  each layer, and the width and clearance of each net group. Also save the layer roles as a small
+  JSON file (`{"F.Cu": "horizontal", "In1.Cu": "plane", "B.Cu": "vertical"}`) so
+  `kcp lint --layer-plan` can check main directions and tracks on plane layers.
 - **Order.** Route by function group:
   1. power,
   2. high-current outputs,
@@ -252,7 +274,8 @@ Read [references/checks-and-delivery.md](references/checks-and-delivery.md).
 - **Every "Yes" in Part C** is executed and its result recorded.
 - **Visual review.** Review the whole board and each layer. Trace a few representative nets per
   group: clear order, no zigzags, no needless layer changes, tidy rows, readable silkscreen.
-  DRC passing does not replace this.
+  DRC passing does not replace this. Put the `kcp lint --markdown` table in the delivery summary,
+  and explain every warn or fail that stays.
 - **Fab files.**
   - Export Gerbers and Excellon drill files (PTH and NPTH separate).
   - Run `scripts/gerber_readback.py` against the native board values.
@@ -295,7 +318,23 @@ Read [references/checks-and-delivery.md](references/checks-and-delivery.md).
     not enough.
   - Label every claim as "CAD-checked", "estimated" or "needs hardware verification".
 
-## Bundled scripts (`scripts/`)
+## Bundled tools and scripts
+
+### `kcp/`: board tools (Python 3.9+, standard library only)
+
+Run `python <skill>/kcp <command> --help` for every option.
+
+| Command | Purpose |
+|---|---|
+| `inspect board.kicad_pcb [--summary] [--refs R1,R2] [--no-pads] [--drc]` | Board as JSON: outline size, layers and stackup; footprints (ref, value, footprint, x/y/rotation, side, courtyard box, pads with number, net, position, shape, size, drill); nets (netclass, pads, segments, length, vias); track, via and zone statistics. `--drc` adds unconnected items per net from kicad-cli (~15 s on a large board) |
+| `lint board.kicad_pcb [--preset T\|C\|R] [--layer-plan plan.json] [--thresholds t.json] [--strict]` | Tidiness score, pass / warn / fail per metric: segments per mm and per connection, off-angle segments, turns per 10 mm, S-bend jogs, vias on power nets and per signal connection, layer main-direction conformity, tracks on GND plane layers, non-GND pours, dangling ends, silkscreen over pads (text boxes estimated), part-row alignment. Exit 1 on fail. Thresholds are in `kcp/presets/lint.json`; copy it and pass `--thresholds` to change them |
+| `decisions PCB_DECISIONS.md [--checkpoint CP0\|CP1\|CP2\|CP4\|CP6]` | Blank rows per Part, in any language (rows found by ID, answers by the `Yes/No` or `Decision` column). With `--checkpoint`, exit 1 while anything that checkpoint needs is blank or unconfirmed |
+| `drc board.kicad_pcb [--refill] [--parity]` | kicad-cli DRC summarised: violations by type, unconnected per net, parity. Runs on a temporary copy unless `--parity` is given, so nothing is written next to the board |
+| `erc board.kicad_sch` | kicad-cli ERC summarised by type |
+
+Example layer plans are in the repository's `examples/layer-plans/`.
+
+### `scripts/`
 
 | Script | Purpose | Runs with |
 |---|---|---|
@@ -317,7 +356,9 @@ Where KiCad's Python lives:
 - **Tested with KiCad 10.0.x.** `kicad-cli` options and Gerber file naming change between
   versions. Check `kicad-cli <command> --help` before relying on a flag. Identify Gerber layers
   by their `%TF.FileFunction` attribute, not by file extension.
-- **Python bindings.** The board scripts use the legacy SWIG `pcbnew` bindings. KiCad has
-  deprecated them in favour of the IPC API and plans to remove them in a future major release.
-  When that happens, `export_previews.py` and `trace_drop.py` need porting. The Gerber tools do
-  not depend on KiCad.
+- **Python bindings.** `kcp` reads and writes the board files itself and never imports `pcbnew`.
+  `export_previews.py` and `trace_drop.py` still use the legacy SWIG `pcbnew` bindings, which
+  KiCad has deprecated in favour of the IPC API and plans to remove in a future major release;
+  they are being ported to `kcp`. The Gerber tools do not depend on KiCad.
+- **Board file format.** `kcp` reads KiCad 10 boards (nets written by name) and the older format
+  with numbered nets.

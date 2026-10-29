@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased (0.2.0 in progress)
+
+- `kcp` board tools, standard-library Python 3.9+, no `pcbnew`:
+  - `inspect`: the board as JSON (outline, layers, stackup, footprints, pads, nets, tracks, vias,
+    zones; unconnected items from kicad-cli with `--drc`).
+  - `lint`: tidiness score per preset (T/C/R) with pass/warn/fail; thresholds in
+    `kcp/presets/lint.json`. Metrics: segments per mm and per connection, off-angle segments,
+    turns per 10 mm, S-bend jogs, vias on power nets and per signal connection, layer
+    main-direction conformity (with a layer plan), tracks on GND plane layers, non-GND pours,
+    dangling ends, silkscreen over pads, part-row alignment.
+  - `decisions`: blank rows in `PCB_DECISIONS.md` in any language; `--checkpoint` readiness.
+  - `drc` / `erc`: kicad-cli reports summarised; DRC runs on a temporary copy.
+  - Reads KiCad 10 boards (nets by name) and the older numbered-net format.
+- `SKILL.md`: which stage calls which tool; layer plan saved as JSON for the lint.
+- `examples/`: saved Part A defaults, layer plans (4L-S1, 4L-S2, 2L-a).
+- `pyproject.toml` for an optional `pip install` (console script `kcp`).
+- Tests: s-expression round trip, geometry, board model, all tools, and a hand-written 4-layer
+  test board that KiCad's own DRC confirms.
+
 ## 0.1.0 (first public release)
 
 - Seven-stage KiCad workflow with four user checkpoints; no routing before placement is

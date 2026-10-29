@@ -1,0 +1,9 @@
+{
+  "description": "4L-S2: top horizontal, In1 GND plane, In2 power trunks and a few signals (no main direction), bottom vertical.",
+  "layers": {
+    "F.Cu": "horizontal",
+    "In1.Cu": "plane",
+    "In2.Cu": "any",
+    "B.Cu": "vertical"
+  }
+}

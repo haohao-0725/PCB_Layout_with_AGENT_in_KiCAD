@@ -1,0 +1,9 @@
+{
+  "description": "4L-S1 for the tidy preset: top horizontal, two GND planes, bottom vertical. Use with: kcp lint board.kicad_pcb --layer-plan 4L-S1.json",
+  "layers": {
+    "F.Cu": "horizontal",
+    "In1.Cu": "plane",
+    "In2.Cu": "plane",
+    "B.Cu": "vertical"
+  }
+}

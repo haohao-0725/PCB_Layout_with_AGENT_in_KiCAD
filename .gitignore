@@ -4,3 +4,6 @@ __pycache__/
 Thumbs.db
 *-workspace/
 previews/
+build/
+dist/
+*.egg-info/

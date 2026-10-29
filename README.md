@@ -64,7 +64,10 @@ This skill captures what fixed those problems, so the next board doesn't repeat 
 - **Reference guides:** layout rules per style; circuit policy (add-on classes A–D, current
   ratings, reverse-polarity options, regenerated motor energy); a routing playbook with
   stackup options; verification and order-spec templates; KiCad 10 scripting notes.
-- **Four scripts**, listed under [Scripts](#scripts).
+- **Board tools (`kcp`)** that read the `.kicad_pcb` file directly, plus four scripts. Both are
+  listed under [Tools and scripts](#tools-and-scripts). The tidiness lint turns "is this layout
+  readable?" into numbers: segments per mm, zigzag turns, off-angle segments, vias on power
+  nets, layer directions, non-GND pours, part-row alignment.
 
 ## Is it for you?
 
@@ -92,6 +95,7 @@ This skill captures what fixed those problems, so the next board doesn't repeat 
 | KiCad | **10.0.x** | `kicad-cli` options and Gerber file naming change between versions. The skill checks `--help` and reads Gerber layers from X2 attributes instead of file extensions |
 | OS | Windows 10 | macOS and Linux should work, but the paths in the docs are Windows-first and untested elsewhere |
 | Python for board scripts | KiCad's bundled Python | `export_previews.py` and `trace_drop.py` use the legacy SWIG `pcbnew` bindings. KiCad has deprecated them in favour of the IPC API and plans to remove them in a future major release; these two scripts will need porting then |
+| Python for `kcp` tools | 3.9+ (stdlib only) | Reads `.kicad_pcb` files directly, no `pcbnew`; only `kcp drc` / `kcp erc` call `kicad-cli` |
 | Python for Gerber tools | 3.8+ (stdlib only) | `gerber_readback.py` and `compare_gerbers.py` need no KiCad |
 | Agents | Claude Code, Codex | Any agent that reads `SKILL.md` folders (the Agent Skills format) should work |
 
@@ -169,7 +173,41 @@ table.
 | 6. Verification and fab files | DRC/parity zero, Gerbers + drill + readback, order spec | ✔ |
 | 7. Close-out | One rebuild entry point, archived old files, handoff notes | — |
 
-## Scripts
+## Tools and scripts
+
+### Board tools: `kcp`
+
+Any Python 3.9+, no KiCad needed except for `drc` and `erc`. Each command prints JSON, or
+Markdown tables with `--markdown`. Exit code 1 means the check failed; 2 means the tool could
+not run.
+
+| Command | What it does |
+|---|---|
+| `inspect` | The board as JSON: outline size, layers and stackup, footprints with position, rotation, side, courtyard and pads, nets with netclass and routing stats, tracks, vias and zones. `--drc` adds unconnected items per net |
+| `lint` | Tidiness score against a preset (T, C or R), pass / warn / fail per metric. Thresholds live in `kcp/presets/lint.json`; pass your own copy with `--thresholds`. Give it a layer plan (`examples/layer-plans/`) to check each layer's main direction |
+| `decisions` | Blank rows in `PCB_DECISIONS.md`, in any language. `--checkpoint CP2` exits 1 while anything CP2 needs is unanswered |
+| `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC runs on a temporary copy, so nothing is written next to your board |
+
+```bash
+python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
+python skills/kicad-clean-pcb/kcp lint board.kicad_pcb --preset T --layer-plan examples/layer-plans/4L-S1.json --markdown
+python skills/kicad-clean-pcb/kcp decisions PCB_DECISIONS.md --checkpoint CP2
+python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
+```
+
+On the board this skill came from, the lint separates the two versions clearly:
+
+| Metric | Autorouted draft | Restructured board |
+|---|---:|---:|
+| Segments per mm of track | 1.00 | 0.09 |
+| Turns per 10 mm (zigzag) | 8.8 | 0.5 |
+| Segments not at 0/45/90° | 79 | 0 |
+| Vias on power / phase nets | 24 | 0 |
+| Pours on nets other than GND | 3 | 0 |
+| Worst resistor-row misalignment | 1.35 mm | 0 mm |
+| Result (preset T) | fail on 11 metrics | warn (11 short S-bends to review) |
+
+### Scripts
 
 | Script | What it does | Run with |
 |---|---|---|
@@ -185,11 +223,28 @@ python skills/kicad-clean-pcb/scripts/gerber_readback.py fab.zip --expect-size 1
 python skills/kicad-clean-pcb/scripts/compare_gerbers.py old.zip new.zip
 ```
 
-Run the unit tests (no KiCad needed):
+Run the unit tests (no KiCad needed; one integration test runs only when `kicad-cli` is installed):
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Saving your defaults
+
+If you always start the same way, keep a filled Part A in a file of your own, **outside** the
+installed skill folder (updates overwrite it). Start from
+[`examples/defaults/PCB_PART_A_DEFAULTS.md`](examples/defaults/PCB_PART_A_DEFAULTS.md), then
+point your agent at it from your global notes (`~/.claude/CLAUDE.md` for Claude Code, `AGENTS.md`
+for Codex):
+
+```markdown
+## PCB work
+For the kicad-clean-pcb skill, my default Part A is in ~/pcb-defaults/PCB_PART_A_DEFAULTS.md.
+Copy it into each new PCB_DECISIONS.md and ask me once to confirm it.
+```
+
+At stage 0 the agent copies it into the project and asks for one confirmation instead of going
+through every axis.
 
 ## Repository layout
 
@@ -199,9 +254,12 @@ skills/kicad-clean-pcb/
   SKILL.md               workflow, checkpoints, principles
   references/            preferences, layout rules, circuit policy, routing, checks, KiCad scripting, regional ordering
   assets/                PCB_DECISIONS and PROJECT_BRIEF templates
+  kcp/                   board tools: inspect, lint, decisions, drc/erc (Python package, stdlib only)
   scripts/               preview, trace, readback and compare tools
   agents/openai.yaml     Codex UI metadata
-tests/                   unit tests for the scripts
+examples/                saved-defaults example, layer plans for `kcp lint`
+tests/                   unit tests and a hand-written test board
+pyproject.toml           packaging for `pip install` (optional; the skill folder works on its own)
 ```
 
 ## Limitations and disclaimer

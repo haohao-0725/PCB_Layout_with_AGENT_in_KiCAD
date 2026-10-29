@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kicad-clean-pcb"
+version = "0.2.0.dev0"
+description = "Deterministic KiCad board tools for the kicad-clean-pcb agent skill: inspect, tidiness lint, decision checks."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "haohao-0725" }]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["kicad", "pcb", "pcb-layout", "agent-skills", "claude-code", "codex", "gerber"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.optional-dependencies]
+# Live backend through a running KiCad (later phase).
+ipc = ["kicad-python>=0.7"]
+# MCP server wrapper (later phase).
+mcp = ["mcp>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/haohao-0725/PCB_Layout_with_AGENT_in_KiCAD"
+
+[project.scripts]
+kcp = "kcp.cli:main"
+
+[tool.setuptools]
+# The package lives inside the skill folder so a copied skill works without installing anything.
+package-dir = { "" = "skills/kicad-clean-pcb" }
+packages = ["kcp", "kcp.backends"]
+
+[tool.setuptools.package-data]
+kcp = ["presets/*.json"]

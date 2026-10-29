@@ -1,0 +1,70 @@
+{
+  "schema": "kcp-lint-thresholds/1",
+  "description": "Tidiness thresholds for kcp lint, per design preset (references/preferences.md). Copy this file and pass it with --thresholds to change a number; do not edit the installed skill.",
+  "settings": {
+    "angle_tolerance_deg": 0.1,
+    "min_segment_mm_for_angle": 0.05,
+    "turn_min_deg": 1.0,
+    "jog_width_factor": 2.0,
+    "zigzag_min_net_mm": 20.0,
+    "plane_coverage_min": 0.5,
+    "max_vias_per_signal_net": null,
+    "row_prefixes": ["R"],
+    "row_capture_mm": 2.0,
+    "row_max_gap_mm": 12.0,
+    "row_min_parts": 3,
+    "row_align_tolerance_mm": 0.01,
+    "ground_nets": ["GND", "GND*", "*GND", "*_GND_*", "VSS", "VSS*", "0V"],
+    "power_nets": ["+*", "-*V", "-*V?", "VCC*", "VDD*", "VIN*", "VM", "VM_*", "VMOT*", "VBUS*", "VBAT*", "VSYS*",
+                   "V+*", "VIO*", "*_3V3*", "*3V3*", "*3.3V*", "*5V", "*_5V*", "*5V0*", "*12V*", "*24V*", "*48V*"],
+    "power_netclasses": ["Power*", "*Power*", "Supply*", "*Supply*", "HighCurrent*", "*HighCurrent*", "*Motor*", "*Phase*"]
+  },
+  "presets": {
+    "T": {
+      "name": "Tidy & readable",
+      "settings": {"max_vias_per_signal_net": 1},
+      "metrics": {
+        "segments_per_mm": {"pass_max": 0.15, "warn_max": 0.3},
+        "max_segments_per_connection": {"pass_max": 10, "warn_max": 20},
+        "off_angle_segments": {"pass_max": 0, "warn_max": 3},
+        "turns_per_10mm": {"pass_max": 1.0, "warn_max": 2.0},
+        "jogs": {"pass_max": 5, "warn_max": 25},
+        "power_net_vias": {"pass_max": 0, "warn_max": 2},
+        "signal_nets_over_via_limit": {"pass_max": 0, "warn_max": 3},
+        "direction_conformity_min_pct": {"pass_min": 75, "warn_min": 60},
+        "plane_layer_tracks": {"pass_max": 0, "warn_max": 0},
+        "non_ground_zones": {"pass_max": 0, "warn_max": 0},
+        "dangling_ends": {"pass_max": 0, "warn_max": 0},
+        "silk_over_pads": {"pass_max": 0, "warn_max": 5},
+        "row_misalignment_max_mm": {"pass_max": 0.05, "warn_max": 0.5}
+      }
+    },
+    "C": {
+      "name": "Compact / shortest",
+      "metrics": {
+        "segments_per_mm": {"pass_max": 0.3, "warn_max": 0.6},
+        "off_angle_segments": {"pass_max": 0, "warn_max": 10},
+        "turns_per_10mm": {"pass_max": 2.0, "warn_max": 4.0},
+        "jogs": {"pass_max": 10, "warn_max": 40},
+        "dangling_ends": {"pass_max": 0, "warn_max": 0},
+        "silk_over_pads": {"pass_max": 0, "warn_max": 5}
+      }
+    },
+    "R": {
+      "name": "Robust / max electrical",
+      "metrics": {
+        "segments_per_mm": {"pass_max": 0.15, "warn_max": 0.3},
+        "max_segments_per_connection": {"pass_max": 10, "warn_max": 20},
+        "off_angle_segments": {"pass_max": 0, "warn_max": 3},
+        "turns_per_10mm": {"pass_max": 1.0, "warn_max": 2.0},
+        "jogs": {"pass_max": 5, "warn_max": 25},
+        "direction_conformity_min_pct": {"pass_min": 75, "warn_min": 60},
+        "plane_layer_tracks": {"pass_max": 0, "warn_max": 0},
+        "non_ground_zones": {"pass_max": 0, "warn_max": 0},
+        "dangling_ends": {"pass_max": 0, "warn_max": 0},
+        "silk_over_pads": {"pass_max": 0, "warn_max": 5},
+        "row_misalignment_max_mm": {"pass_max": 0.05, "warn_max": 0.5}
+      }
+    }
+  }
+}

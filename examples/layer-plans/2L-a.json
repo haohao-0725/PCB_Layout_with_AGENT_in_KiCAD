@@ -1,0 +1,7 @@
+{
+  "description": "2L-a: most routing on top (horizontal main direction), bottom is a mostly unbroken GND pour with short crossings, so it has no main direction and is not counted as a plane.",
+  "layers": {
+    "F.Cu": "horizontal",
+    "B.Cu": "any"
+  }
+}
