@@ -186,6 +186,38 @@ python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
 python -m unittest discover -s tests -v
 ```
 
+## MCP server 與即時模式
+
+同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 16 個：inspect、lint、decisions、DRC、ERC、
+擺放、走線、預覽、壓降、Gerber 回讀與比對）。唯讀工具會標示唯讀，會寫入的工具也會標示。
+
+- **Claude Code：** 安裝 plugin 就會註冊（repo 根目錄的 `.mcp.json` 會執行
+  `python <plugin>/skills/kicad-clean-pcb/kcp mcp`）。PATH 上需要有 `python`（3.9 以上）。
+- **Codex**（`~/.codex/config.toml`）：
+
+  ```toml
+  [mcp_servers.kicad-clean-pcb]
+  command = "python"
+  args = ["/path/to/skills/kicad-clean-pcb/kcp", "mcp"]
+  ```
+- **其他 agent：** 任何能啟動 stdio server 的 MCP client：
+  `{"command": "python", "args": ["/path/to/skills/kicad-clean-pcb/kcp", "mcp"]}`。
+
+有安裝官方 SDK（`pip install mcp`，1.x 或 2.x）時會用它；沒有時改用內建的小型 stdio server，工具完全相同，
+所以不需要額外安裝。
+
+**即時模式（KiCad IPC API）。** 在 `inspect`、`lint`、`place fit-check`、`place move`、`route path`
+（CLI 或 MCP）把板子檔改成 `live`，就會直接對 KiCad 裡開著的板子操作，有沒有存檔都可以。每次修改是一筆
+KiCad commit，名稱像 `kcp: route X_DIR`，按一次 Ctrl+Z 就能復原；檢查沒過時什麼都不寫。使用方式：
+
+1. `pip install kicad-python`（模組名 `kipy`；0.8 版對應 KiCad 10.0.6，請先更新 KiCad）。
+2. 在 KiCad 啟用 API server：偏好設定 → Plugins（KiCad 9／10）。設定存在 `kicad_common.json` 的
+   `api.enable_server`。
+3. KiCad 保持開啟，並打開這塊板子。
+
+KiCad 10 的 API 沒有原理圖指令，也不能從庫載入 footprint，所以原理圖、新 footprint 與製造檔仍走檔案後端和
+`kicad-cli`。即時模式目前以模擬 `kipy` 的測試驗證，還沒在這個 repo 對實際執行中的 KiCad 跑過。
+
 ## 儲存你的預設值
 
 如果你每次都用同一組偏好開始，可以把填好的 Part A 存成自己的檔案，放在 skill 安裝資料夾**以外**的地方

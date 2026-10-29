@@ -13,19 +13,30 @@ unreadable file, kicad-cli missing, KiCad has the project open).
     python <skill>/kcp route path|cleanup board.kicad_pcb ... ;  kcp route lane --lines ... --entry ...
     python <skill>/kcp previews board.kicad_pcb --out-dir previews
     python <skill>/kcp tracedrop board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15
+    python <skill>/kcp mcp                      # MCP server on stdio (same tools)
+
+Board arguments of inspect, lint, place fit-check / move and route path also accept "live": the
+board open in KiCad, through its IPC API (pip install kicad-python; enable the API server in KiCad).
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+import threading
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import __version__
 
+_local = threading.local()
+
 
 def _emit(data, markdown: Optional[str], out: Optional[Path]) -> None:
+    sink = getattr(_local, "sink", None)
+    if sink is not None:                 # called through run(): hand the data back, print nothing
+        sink.append(data)
+        return
     text = markdown if markdown is not None else json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -35,17 +46,32 @@ def _emit(data, markdown: Optional[str], out: Optional[Path]) -> None:
         sys.stdout.write(text)
 
 
+LIVE = "live"
+
+
+def _is_live(board) -> bool:
+    return str(board) == LIVE
+
+
+def _load(board):
+    """The board model from a file, or from the board open in KiCad when board == 'live'."""
+    if _is_live(board):
+        from .backends.ipc import LiveBoard
+        return LiveBoard().snapshot()
+    from .backends.file import load_board
+    return load_board(board)
+
+
 def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--markdown", action="store_true", help="print Markdown tables instead of JSON")
     parser.add_argument("--out", type=Path, help="write the result to this file instead of stdout")
 
 
 def cmd_inspect(args) -> int:
-    from .backends.file import load_board
     from .inspection import inspect_board, to_markdown
-    board = load_board(args.board)
+    board = _load(args.board)
     drc = None
-    if args.drc or args.refill:
+    if (args.drc or args.refill) and not _is_live(args.board):
         from . import kicad_cli
         drc = kicad_cli.summarize_drc(kicad_cli.drc(args.board, refill=args.refill))
     refs = [r.strip() for r in args.refs.split(",")] if args.refs else None
@@ -55,9 +81,8 @@ def cmd_inspect(args) -> int:
 
 
 def cmd_lint(args) -> int:
-    from .backends.file import load_board
     from .lint import load_layer_plan, load_thresholds, lint_board, to_markdown
-    board = load_board(args.board)
+    board = _load(args.board)
     plan = load_layer_plan(args.layer_plan) if args.layer_plan else None
     thresholds = load_thresholds(args.thresholds)
     result = lint_board(board, args.preset, thresholds, plan,
@@ -123,13 +148,22 @@ def _keepout(text: str):
 
 
 def cmd_place(args) -> int:
-    from .backends.file import load_board
     from .board import BoardBuilder
     from . import place as pl
     if args.action == "fit-check":
-        report = pl.fit_check(load_board(args.board), args.keepout or [], args.edge_min,
+        report = pl.fit_check(_load(args.board), args.keepout or [], args.edge_min,
                               args.ignore.split(",") if args.ignore else ())
         _emit({"tool": "kcp place fit-check", **report}, None, args.out)
+        return 0 if report["ok"] else 1
+    if _is_live(args.board):
+        if args.action != "move":
+            raise ValueError("on the live board only 'place move' and 'place fit-check' are available")
+        from .backends.ipc import LiveBoard
+        live = LiveBoard()
+        live.move_footprint(args.ref, args.x, args.y, args.rot)
+        report = pl.fit_check(live.snapshot())
+        _emit({"tool": "kcp place move", "live": True, "moved": {args.ref: [args.x, args.y, args.rot]},
+               "fit_check": report}, None, args.out)
         return 0 if report["ok"] else 1
     b = BoardBuilder.open(args.board)
     moved = {}
@@ -163,6 +197,12 @@ def cmd_route(args) -> int:
         result = rt.lane_order(lines, entry)
         _emit({"tool": "kcp route lane", **result}, None, args.out)
         return 1 if result.get("crossings") else 0
+    if args.action == "path" and _is_live(args.board):
+        from .backends.ipc import LiveBoard
+        tokens = [tok if "," not in tok else _point(tok) for tok in args.points.replace(";", " ").split()]
+        result = LiveBoard().route_path(args.net, args.layer, args.width, tokens, args.any_angle, args.dry_run)
+        _emit({"tool": "kcp route path", "live": True, **result}, None, args.out)
+        return 1 if result["conflicts"] else 0
     from .board import BoardBuilder
     from .model import NetClasses
     b = BoardBuilder.open(args.board)
@@ -212,13 +252,22 @@ def cmd_tracedrop(args) -> int:
     return 1 if result["above_limit"] else 0
 
 
+def cmd_mcp(args) -> int:
+    from .mcp_server import serve, tool_list
+    if args.list:
+        _emit({"tool": "kcp mcp", "tools": tool_list()}, None, None)
+        return 0
+    serve(prefer_sdk=not args.builtin)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kcp", description="KiCad board tools for the kicad-clean-pcb skill.")
     parser.add_argument("--version", action="version", version=f"kcp {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("inspect", help="the board as JSON: outline, layers, footprints, pads, nets, tracks")
-    p.add_argument("board", type=Path)
+    p.add_argument("board", type=Path, help="a .kicad_pcb file, or 'live' for the board open in KiCad (IPC API)")
     p.add_argument("--summary", action="store_true", help="footprint positions only; nets with 2+ pads only")
     p.add_argument("--refs", help="only these footprints, comma separated")
     p.add_argument("--no-pads", action="store_true", help="leave out the per-pad list")
@@ -228,7 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_inspect)
 
     p = sub.add_parser("lint", help="tidiness score with pass/warn/fail per metric")
-    p.add_argument("board", type=Path)
+    p.add_argument("board", type=Path, help="a .kicad_pcb file, or 'live' for the board open in KiCad")
     p.add_argument("--preset", default="T", help="T, C or R (default T), as in the thresholds file")
     p.add_argument("--layer-plan", type=Path, help='JSON: {"F.Cu": "horizontal", "B.Cu": "vertical", "In1.Cu": "plane"}')
     p.add_argument("--thresholds", type=Path, help="thresholds file (default: kcp/presets/lint.json)")
@@ -329,7 +378,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dt-limit", type=float, default=20.0)
     _common(p)
     p.set_defaults(func=cmd_tracedrop)
+
+    p = sub.add_parser("mcp", help="run the MCP server on stdio (the same tools as this CLI)")
+    p.add_argument("--builtin", action="store_true", help="use the built-in server even if the mcp SDK is installed")
+    p.add_argument("--list", action="store_true", help="print the tool list and exit")
+    p.set_defaults(func=cmd_mcp)
     return parser
+
+
+def run(argv: List[str]) -> Tuple[int, Dict]:
+    """Run one subcommand and return (exit code, result) without printing anything.
+    Thread-safe; used by the MCP server, which owns stdout."""
+    _local.sink = []
+    try:
+        try:
+            args = build_parser().parse_args([str(a) for a in argv])
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 2
+            return code, {"error": f"bad arguments: {' '.join(map(str, argv))}"}
+        try:
+            code = args.func(args)
+        except Exception as exc:
+            return 2, {"tool": f"kcp {args.command}", "error": f"{type(exc).__name__}: {exc}"}
+        return code, (_local.sink[-1] if _local.sink else {})
+    finally:
+        _local.sink = None
 
 
 def main(argv: Optional[List[str]] = None) -> int:

@@ -243,3 +243,16 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   KiCad 會替沒有符號的安裝孔補上隨機 UUID 的欄位，改由 `place_footprint` 先寫好。
 - SKILL.md 與 references（layout-rules、routing-playbook、checks-and-delivery、kicad-scripting 全面改寫）
   改成「呼叫哪個工具」。測試共 67 個。
+
+### Phase 4 結果（2026-10-29）
+
+- `kcp mcp`：16 個 MCP 工具，與 CLI 子指令一對一，標註唯讀／會寫入。有官方 SDK 時用它
+  （**mcp 2.x 已把 FastMCP 改名為 `MCPServer`**，1.x 仍是 FastMCP，兩者都支援）；沒有時用內建 stdio JSON-RPC server。
+  plugin 根目錄 `.mcp.json` 會自動註冊。
+- 測到並修正：SDK 會在多個執行緒同時跑工具，原本用全域 stdout 轉向收結果，會互相換掉、還可能吞掉協定訊息；
+  改成 `cli.run()` 以 thread-local 回傳結果，不碰 stdout。
+- 即時後端 `backends/ipc.py`（kipy）：用 `Board.get_as_string()` 讀開著的板子，檢查沿用檔案後端；
+  每次修改是一筆 commit（`kcp: route NET`），Ctrl+Z 一次復原。`inspect`、`lint`、`place fit-check`、
+  `place move`、`route path` 可用 `live`。**尚未對執行中的 KiCad 實測**（API server 目前關閉，要由使用者開啟）；
+  以假 kipy 測試，並確認呼叫的屬性在真 kipy 0.8.0 類別上都存在。
+- PyPI：`python -m build` 與 `twine check` 通過；發佈步驟在 `docs/RELEASING.md`，由使用者執行。測試共 74 個。

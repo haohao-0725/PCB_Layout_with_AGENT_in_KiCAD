@@ -231,6 +231,42 @@ Run the unit tests (no KiCad needed; one integration test runs only when `kicad-
 python -m unittest discover -s tests -v
 ```
 
+## MCP server and live mode
+
+The same tools are available as an MCP server, one tool per `kcp` command (16 tools: inspect,
+lint, decisions, DRC, ERC, place, route, previews, trace drop, Gerber readback and compare).
+Read-only tools are marked as such; tools that write say so.
+
+- **Claude Code:** installing the plugin registers the server (`.mcp.json` in the repository root
+  runs `python <plugin>/skills/kicad-clean-pcb/kcp mcp`). It needs `python` on your PATH (3.9+).
+- **Codex** (`~/.codex/config.toml`):
+
+  ```toml
+  [mcp_servers.kicad-clean-pcb]
+  command = "python"
+  args = ["/path/to/skills/kicad-clean-pcb/kcp", "mcp"]
+  ```
+- **Other agents:** any MCP client that starts a stdio server:
+  `{"command": "python", "args": ["/path/to/skills/kicad-clean-pcb/kcp", "mcp"]}`.
+
+With the official SDK installed (`pip install mcp`, 1.x or 2.x) the server uses it; without it, a
+small built-in stdio server with the same tools runs instead, so nothing extra is required.
+
+**Live mode (KiCad IPC API).** Pass `live` instead of a board file to `inspect`, `lint`,
+`place fit-check`, `place move` and `route path` (CLI or MCP) to work on the board open in KiCad,
+saved or not. Every edit is one KiCad commit named like `kcp: route X_DIR`, so one Ctrl+Z undoes
+it, and nothing is written when a check fails. To use it:
+
+1. `pip install kicad-python` (module `kipy`; 0.8 targets KiCad 10.0.6, so update KiCad first).
+2. In KiCad, enable the API server: Preferences → Plugins (KiCad 9/10). It is stored as
+   `api.enable_server` in `kicad_common.json`.
+3. Keep KiCad running with the board open.
+
+KiCad 10's API has no schematic commands and cannot load library footprints, so schematic work,
+new footprints and fab output stay on the file backend and `kicad-cli`. Live mode is covered by
+tests against a stand-in for `kipy`; it has not yet been run against a live KiCad session in this
+repository.
+
 ## Saving your defaults
 
 If you always start the same way, keep a filled Part A in a file of your own, **outside** the
