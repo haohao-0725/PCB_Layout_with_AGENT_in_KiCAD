@@ -247,7 +247,7 @@ The same tools are available as an MCP server, one tool per `kcp` command (16 to
 lint, decisions, DRC, ERC, place, route, previews, trace drop, Gerber readback and compare).
 Read-only tools are marked as such; tools that write say so.
 
-- **Claude Code:** installing the plugin registers the server (`.mcp.json` in the repository root
+- **Claude Code:** installing the plugin registers the server (`mcpServers` in `.claude-plugin/plugin.json`
   runs `python <plugin>/skills/kicad-clean-pcb/kcp mcp`). It needs `python` on your PATH (3.9+).
 - **Codex** (`~/.codex/config.toml`):
 
@@ -297,8 +297,7 @@ through every axis.
 ## Repository layout
 
 ```text
-.claude-plugin/          plugin.json + marketplace.json (Claude Code plugin marketplace)
-.mcp.json                registers the kcp MCP server when the plugin is installed
+.claude-plugin/          plugin.json (also registers the kcp MCP server) + marketplace.json
 skills/kicad-clean-pcb/
   SKILL.md               workflow, checkpoints, principles
   references/            preferences, layout rules, circuit policy, routing, checks, KiCad scripting, regional ordering

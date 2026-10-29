@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "kicad-clean-pcb": {
-      "command": "python",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/skills/kicad-clean-pcb/kcp", "mcp"]
-    }
-  }
-}

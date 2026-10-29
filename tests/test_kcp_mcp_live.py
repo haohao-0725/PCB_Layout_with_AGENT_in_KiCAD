@@ -82,10 +82,16 @@ class McpTests(unittest.TestCase):
         self.assertEqual(results["bad"][0], 2)
 
     def test_plugin_declares_the_server(self):
-        config = json.loads((REPO / ".mcp.json").read_text(encoding="utf-8"))
+        # Declared in plugin.json, not a root .mcp.json: a root .mcp.json is also read as the project's
+        # own MCP config when the repository is opened in Claude Code, where ${CLAUDE_PLUGIN_ROOT}
+        # has no value and the server fails to start.
+        config = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         server = config["mcpServers"]["kicad-clean-pcb"]
         self.assertEqual(server["args"][-1], "mcp")
         self.assertIn("${CLAUDE_PLUGIN_ROOT}", server["args"][0])
+        script = Path(server["args"][0].replace("${CLAUDE_PLUGIN_ROOT}", str(REPO)))
+        self.assertTrue((script / "__main__.py").is_file())
+        self.assertFalse((REPO / ".mcp.json").exists())
 
 
 # ---------------------------------------------------------------- live backend with a fake kipy

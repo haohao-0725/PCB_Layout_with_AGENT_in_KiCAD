@@ -200,7 +200,7 @@ python -m unittest discover -s tests -v
 同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 16 個：inspect、lint、decisions、DRC、ERC、
 擺放、走線、預覽、壓降、Gerber 回讀與比對）。唯讀工具會標示唯讀，會寫入的工具也會標示。
 
-- **Claude Code：** 安裝 plugin 就會註冊（repo 根目錄的 `.mcp.json` 會執行
+- **Claude Code：** 安裝 plugin 就會註冊（`.claude-plugin/plugin.json` 的 `mcpServers` 會執行
   `python <plugin>/skills/kicad-clean-pcb/kcp mcp`）。PATH 上需要有 `python`（3.9 以上）。
 - **Codex**（`~/.codex/config.toml`）：
 

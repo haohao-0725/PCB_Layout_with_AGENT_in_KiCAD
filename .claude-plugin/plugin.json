@@ -10,6 +10,12 @@
   "homepage": "https://github.com/haohao-0725/PCB_Layout_with_AGENT_in_KiCAD",
   "repository": "https://github.com/haohao-0725/PCB_Layout_with_AGENT_in_KiCAD",
   "license": "MIT",
+  "mcpServers": {
+    "kicad-clean-pcb": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/skills/kicad-clean-pcb/kcp", "mcp"]
+    }
+  },
   "keywords": [
     "kicad",
     "pcb",

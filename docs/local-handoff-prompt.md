@@ -248,7 +248,8 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
 
 - `kcp mcp`：16 個 MCP 工具，與 CLI 子指令一對一，標註唯讀／會寫入。有官方 SDK 時用它
   （**mcp 2.x 已把 FastMCP 改名為 `MCPServer`**，1.x 仍是 FastMCP，兩者都支援）；沒有時用內建 stdio JSON-RPC server。
-  plugin 根目錄 `.mcp.json` 會自動註冊。
+  由 `.claude-plugin/plugin.json` 的 `mcpServers` 自動註冊（2026-10-30 從根目錄 `.mcp.json` 搬過去：
+  根目錄 `.mcp.json` 在直接打開這個 repo 時也會被當成專案設定讀取，`${CLAUDE_PLUGIN_ROOT}` 沒有值，server 啟動失敗）。
 - 測到並修正：SDK 會在多個執行緒同時跑工具，原本用全域 stdout 轉向收結果，會互相換掉、還可能吞掉協定訊息；
   改成 `cli.run()` 以 thread-local 回傳結果，不碰 stdout。
 - 即時後端 `backends/ipc.py`（kipy）：用 `Board.get_as_string()` 讀開著的板子，檢查沿用檔案後端；

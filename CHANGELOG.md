@@ -22,7 +22,7 @@
   writing, `bus` fan-outs, `lane_order`, `cleanup`), `kcp.previews`, `kcp.tracedrop`.
 - `scripts/export_previews.py` and `scripts/trace_drop.py` ported to the file backend: same options,
   any Python 3.9+, no `pcbnew`. Nothing bundled imports `pcbnew` any more.
-- MCP server (`kcp mcp`, registered by `.mcp.json`): 16 tools, one per command; official SDK when
+- MCP server (`kcp mcp`, registered in `plugin.json`): 16 tools, one per command; official SDK when
   installed (mcp 1.x FastMCP or 2.x MCPServer), built-in stdio server otherwise.
 - Live mode through KiCad's IPC API (`kicad-python`): pass `live` instead of a board file; every
   edit is one KiCad commit that Ctrl+Z undoes. Tested against a stand-in for `kipy` only.
