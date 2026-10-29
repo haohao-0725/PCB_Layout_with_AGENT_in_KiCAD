@@ -74,7 +74,9 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
   - Termination resistors sit at the receiver inputs.
   - Series resistors sit on the way to the MCU.
   - Pull-ups and pull-downs sit beside the part they serve (e.g. driver enable pull-up beside
-    the driver, limit-switch pull-up beside its RC filter).
+    the driver, limit-switch pull-up beside its RC filter). With a small series resistor in the
+    line, the pull-up may sit on either side of it; put it on the side its supply rail already
+    passes, so the rail stays one straight trunk.
   - RC filters sit near the receiving pin.
 - **Order inside a row matches the destination pin order,** so the tracks leaving the row don't
   cross.

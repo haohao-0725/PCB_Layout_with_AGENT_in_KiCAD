@@ -256,3 +256,15 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   `place move`、`route path` 可用 `live`。**尚未對執行中的 KiCad 實測**（API server 目前關閉，要由使用者開啟）；
   以假 kipy 測試，並確認呼叫的屬性在真 kipy 0.8.0 類別上都存在。
 - PyPI：`python -m build` 與 `twine check` 通過；發佈步驟在 `docs/RELEASING.md`，由使用者執行。測試共 74 個。
+
+### Phase 5 準備與曝光（2026-10-29）
+
+- Phase 5 由使用者主導（下單、組裝、量測），agent 不下單。已準備：`ORDER_SPEC.md`（JLCPCB 表單值、層序、
+  詢價訊息、下單前檢查）與 `BRINGUP.md`（CP4 實物比對、組裝順序、上電步驟、量測表、回饋方式）。
+- 已寫回 references 的通用教訓：回生能量要看「離驅動器電壓上限的餘裕」（24 V 母線離 29–30 V 只有 5–6 V）；
+  上拉電阻可放在串聯電阻任一側，放在電源幹線經過的那側。
+- 曝光：README 開頭一句話賣點、前後對比圖（`docs/images/lint-comparison.svg`）、範例連結；
+  CHANGELOG 0.2.0；plugin、SKILL.md、kcp、pyproject 版本改為 0.2.0。GitHub topics、release、social preview
+  由使用者在 GitHub 上設定（步驟見 `docs/RELEASING.md`）。
+- 待使用者：CP4 實物比對、量 LM2596 與 470 µF；KiCad 升到 10.0.6、開 API server 後實測即時模式；
+  決定是否 push 分支、開 PR、發佈 PyPI。

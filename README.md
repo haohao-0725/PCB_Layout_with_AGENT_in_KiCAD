@@ -6,6 +6,16 @@
 
 [繁體中文說明](README.zh-TW.md)
 
+**An AI agent takes your working prototype to a tidy, fab-ready KiCad board: you approve every
+decision, the placement is checked on paper before routing, and tidiness is measured, not
+eyeballed.**
+
+![Tidiness lint of an autorouted draft and the restructured board](docs/images/lint-comparison.svg)
+
+See a complete board generated end to end with the bundled tools, from wiring plan to fab zip:
+[examples/stepper-carrier-2axis](examples/stepper-carrier-2axis/) (NUCLEO-F446ZE + 2 × TMC2209,
+4 layers, ERC/DRC/parity 0, no vias).
+
 An **Agent Skill for Claude Code and OpenAI Codex**. It takes a **KiCad PCB** from a working
 prototype to fab-ready **Gerber and drill files**, and keeps you in the loop:
 
@@ -288,15 +298,18 @@ through every axis.
 
 ```text
 .claude-plugin/          plugin.json + marketplace.json (Claude Code plugin marketplace)
+.mcp.json                registers the kcp MCP server when the plugin is installed
 skills/kicad-clean-pcb/
   SKILL.md               workflow, checkpoints, principles
   references/            preferences, layout rules, circuit policy, routing, checks, KiCad scripting, regional ordering
   assets/                PCB_DECISIONS and PROJECT_BRIEF templates
-  kcp/                   board tools: inspect, lint, decisions, drc/erc (Python package, stdlib only)
+  kcp/                   board tools: inspect, lint, decisions, drc/erc, place, route, previews,
+                         tracedrop, MCP server, live IPC backend (Python package, stdlib only)
   scripts/               preview, trace, readback and compare tools
   agents/openai.yaml     Codex UI metadata
 examples/                saved-defaults example, layer plans for `kcp lint`
 tests/                   unit tests and a hand-written test board
+docs/                    README images, release steps (RELEASING.md)
 pyproject.toml           packaging for `pip install` (optional; the skill folder works on its own)
 ```
 

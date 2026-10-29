@@ -2,6 +2,15 @@
 
 [English](README.md)
 
+**讓 AI agent 把能動的原型做成整齊、可以下單的 KiCad 板：每個決定由你確認，走線前先用紙本 1:1 核對擺放，
+整齊度用數字量，不靠感覺。**
+
+![自動繞線草稿與重新整理後的整齊度比較](docs/images/lint-comparison.svg)
+
+完整範例：用內建工具從接線規劃一路產生到製造包的板子
+[examples/stepper-carrier-2axis](examples/stepper-carrier-2axis/)（NUCLEO-F446ZE ＋ 2 × TMC2209、
+4 層、ERC／DRC／parity 皆為 0、沒有 via）。
+
 這是一個給 **Claude Code 與 OpenAI Codex** 用的 **Agent Skill**。它帶著 agent 把一塊
 **KiCad PCB** 從「能運作的原型」做到「可以下單的 **Gerber 與鑽孔檔**」，過程中使用者全程參與：
 

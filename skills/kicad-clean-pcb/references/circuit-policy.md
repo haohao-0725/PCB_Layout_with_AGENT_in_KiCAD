@@ -105,8 +105,11 @@ Estimate it:
 - against what the capacitance can take, ½ C (Vmax² − Vbus²), with Vmax the lowest absolute
   maximum on the bus (driver, capacitors).
 
-Small steppers at moderate speed usually give a negligible result. If it isn't negligible, the
-options are:
+Small steppers at moderate speed usually give a small result, but **check it against the margin,
+not just the size**. Common StepStick drivers are rated about 29–30 V, so a 24 V bus has only
+5–6 V of headroom: two small motors stopping together can push it close to the limit when each
+driver has only the usual 100 µF. Add every axis that can decelerate at once, and include the load
+inertia if you know it. If the result is not comfortably below the limit, the options are:
 
 - more bulk capacitance,
 - a TVS or Zener clamp sized for the energy,

@@ -18,7 +18,7 @@ compatibility: >-
   only) and read or write the KiCad files directly; no pcbnew bindings are needed. kicad-cli is
   needed for DRC, ERC, netlists, previews and fab output; pdftoppm (Poppler) for PNG previews.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # KiCad PCB workflow with human checkpoints

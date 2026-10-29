@@ -65,3 +65,4 @@
 - [ ] 量 470 µF 電容直徑（封裝是 Ø10 mm）。
 - [ ] 若有修改：執行 `rebuild_stepper_carrier.py`，再用 `compare_gerbers.py` 比對新舊製造包。
 - [ ] 下單、付款由使用者自己進行。
+- [ ] 收到板子後依 [BRINGUP.md](BRINGUP.md) 組裝、上電並記錄量測值。

@@ -1,8 +1,8 @@
 {
   "name": "kicad-clean-pcb",
   "displayName": "KiCad Clean PCB",
-  "version": "0.1.0",
-  "description": "KiCad PCB workflow for AI agents with human checkpoints: design presets, a yes/no decision checklist, placement confirmed on a 1:1 print before routing, structured routing, Gerber readback and order specs.",
+  "version": "0.2.0",
+  "description": "KiCad PCB workflow for AI agents with human checkpoints: design presets, a yes/no decision checklist, placement confirmed on a 1:1 print before routing, structured routing, and kcp board tools (inspect, tidiness lint, checked routing, DRC/ERC, Gerber readback) also served over MCP.",
   "author": {
     "name": "haohao-0725",
     "url": "https://github.com/haohao-0725"
@@ -10,5 +10,17 @@
   "homepage": "https://github.com/haohao-0725/PCB_Layout_with_AGENT_in_KiCAD",
   "repository": "https://github.com/haohao-0725/PCB_Layout_with_AGENT_in_KiCAD",
   "license": "MIT",
-  "keywords": ["kicad", "pcb", "pcb-design", "pcb-layout", "electronics", "hardware", "gerber", "agent-skills", "codex"]
+  "keywords": [
+    "kicad",
+    "pcb",
+    "pcb-design",
+    "pcb-layout",
+    "electronics",
+    "hardware",
+    "gerber",
+    "agent-skills",
+    "codex",
+    "mcp",
+    "claude-code"
+  ]
 }

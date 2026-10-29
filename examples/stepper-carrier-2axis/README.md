@@ -22,6 +22,7 @@
 
 整齊度報告：[reports/lint.md](reports/lint.md)。決策紀錄：[PCB_DECISIONS.md](PCB_DECISIONS.md)。
 專案簡報：[PROJECT_BRIEF.md](PROJECT_BRIEF.md)。下單規格：[ORDER_SPEC.md](ORDER_SPEC.md)。
+實板驗收與量測紀錄（下單、組裝後填寫）：[BRINGUP.md](BRINGUP.md)。
 
 ## 板子內容
 
