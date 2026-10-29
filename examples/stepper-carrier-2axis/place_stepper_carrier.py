@@ -24,7 +24,7 @@ sys.path.insert(0, str(HERE))
 
 from kcp.board import BoardBuilder  # noqa: E402
 from kcp.footprints import FootprintLibrary, place_footprint  # noqa: E402
-from kcp.place import fit_check, set_text  # noqa: E402
+from kcp.place import array, fit_check, set_text  # noqa: E402
 from kcp.wiring import read_netlist  # noqa: E402
 
 import build_stepper_carrier as design  # noqa: E402
@@ -36,14 +36,19 @@ CN12 = (CN11[0] + 60.96, CN11[1])               # odd column 60.96 mm right of C
 ROW = 2.54
 TERMINAL_X = 5.3                                # screw terminals: wire entry flush with the left edge
 
-# Each driver unit: origin = EN pad, rotated 180 so the motor pins face the left edge.
-DRIVER_EN = {"A1": (43.0, CN11[1] + 4 * ROW + 17.78), "A2": (43.0, CN11[1] + 20 * ROW + 17.78)}
-UNIT = {  # relative to the driver's EN pad
-    "bulk": (-12.7, 4.99),        # C1/C3 + pad, 10 mm can kept below the module
-    "decoupling": (-5.0, 3.29),   # C2/C4 pad 1, on the VM branch
-    "pullup": (4.5, -6.35),       # R1/R2 pad 1 (EN); pad 2 (+3V3) is 2.54 mm above
-    "terminal": (-38.0, -16.51),  # J2/J3 pin 1 on the left edge
+# One driver unit, placed twice with kcp.place.array. Origin = the driver's EN pad; the module is
+# rotated 180 so its motor pins face the left edge. Offsets: (dx, dy, rotation).
+UNIT = {
+    "driver": (0.0, 0.0, 180),
+    "bulk": (-12.7, 4.99, 270),        # C1/C3 + pad, 10 mm can kept below the module
+    "decoupling": (-5.0, 3.29, 270),   # C2/C4 pad 1, on the VM branch
+    "pullup": (4.5, -6.35, 90),        # R1/R2 pad 1 (EN); pad 2 (+3V3) is 2.54 mm above
+    "terminal": (TERMINAL_X - 43.0, -16.51, 270),  # J2/J3 pin 1 on the left edge
 }
+UNIT_ORIGIN = (43.0, CN11[1] + 4 * ROW + 17.78)   # driver X: DIR lines up with CN11 row 5
+UNIT_PITCH = 16 * ROW                              # driver Y: 16 Morpho rows lower (DIR on row 21)
+UNIT_REFS = [{"driver": "A1", "bulk": "C1", "decoupling": "C2", "pullup": "R1", "terminal": "J2"},
+             {"driver": "A2", "bulk": "C3", "decoupling": "C4", "pullup": "R2", "terminal": "J3"}]
 
 PLACEMENT = {
     # ref: (x, y, rotation)
@@ -54,13 +59,8 @@ PLACEMENT = {
     "R6": (24.0, CN11[1] + 35 * ROW, 0), "C6": (46.0, CN11[1] + 35 * ROW, 270), "R4": (51.5, CN11[1] + 35 * ROW, 90),
     "CN11": (CN11[0], CN11[1], 0), "CN12": (CN12[0], CN12[1], 0),
 }
-for driver, bulk, dec, pullup, term in (("A1", "C1", "C2", "R1", "J2"), ("A2", "C3", "C4", "R2", "J3")):
-    ex, ey = DRIVER_EN[driver]
-    PLACEMENT[driver] = (ex, ey, 180)
-    PLACEMENT[bulk] = (ex + UNIT["bulk"][0], ey + UNIT["bulk"][1], 270)
-    PLACEMENT[dec] = (ex + UNIT["decoupling"][0], ey + UNIT["decoupling"][1], 270)
-    PLACEMENT[pullup] = (ex + UNIT["pullup"][0], ey + UNIT["pullup"][1], 90)
-    PLACEMENT[term] = (TERMINAL_X, ey + UNIT["terminal"][1], 270)
+PLACEMENT.update(array({role: (UNIT_ORIGIN[0] + dx, UNIT_ORIGIN[1] + dy, a) for role, (dx, dy, a) in UNIT.items()},
+                       count=2, offset=(0.0, UNIT_PITCH), rename=lambda role, i: UNIT_REFS[i][role]))
 
 # Keep-outs checked by the fit check (x0, y0, x1, y1, reason).
 KEEPOUTS = [

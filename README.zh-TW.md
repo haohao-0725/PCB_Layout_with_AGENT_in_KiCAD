@@ -68,8 +68,7 @@ agent 第一次用自動放置加格點繞線，DRC 全過，但結果是：
 |---|---|---|
 | KiCad | **10.0.x** | `kicad-cli` 參數和 Gerber 檔名會隨版本改變。skill 會先查 `--help`，並用 X2 屬性辨識 Gerber 層別，不靠副檔名 |
 | 作業系統 | Windows 10 | macOS／Linux 應可使用，但文件中的路徑以 Windows 為主，未實測 |
-| 板子腳本的 Python | KiCad 隨附的 Python | `export_previews.py` 與 `trace_drop.py` 使用舊版 SWIG `pcbnew` 介面。KiCad 已宣布棄用、改用 IPC API，並預計在未來的大版本移除；屆時這兩支腳本需要改寫 |
-| `kcp` 工具的 Python | 3.9 以上（只用標準函式庫） | 直接讀 `.kicad_pcb`，不用 `pcbnew`；只有 `kcp drc`／`kcp erc` 會呼叫 `kicad-cli` |
+| `kcp` 與板子腳本的 Python | 3.9 以上（只用標準函式庫） | 直接讀寫 KiCad 檔案，完全不用 `pcbnew`（已棄用，KiCad 11 移除）。DRC、ERC、netlist、預覽與製造檔交給 `kicad-cli` |
 | Gerber 工具的 Python | 3.8 以上（只用標準函式庫） | `gerber_readback.py` 與 `compare_gerbers.py` 不需要 KiCad |
 | Agent | Claude Code、Codex | 能讀取 `SKILL.md` 資料夾（Agent Skills 格式）的 agent 都應可使用 |
 
@@ -149,6 +148,9 @@ agent 會先做範圍檢查、請你選預設風格，然後在專案裡建立 `
 | `lint` | 依預設風格（T、C、R）評整齊度，每項給 pass／warn／fail。門檻在 `kcp/presets/lint.json`，要改請複製一份再用 `--thresholds` 指定。給它 layer plan（`examples/layer-plans/`）就會檢查各層主方向 |
 | `decisions` | 列出 `PCB_DECISIONS.md` 的空白列，中英文都可以。`--checkpoint CP2` 在 CP2 需要的項目還有空白時回傳 1 |
 | `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案 |
+| `place` | `fit-check`（courtyard 重疊、離板邊距離、禁區）、`move`、`row`、`edge`。KiCad 開著專案時拒絕寫入 |
+| `route` | `path`：焊盤 → 轉折點 → 焊盤，每段都是 0／45／90° 且符合 netclass 間距才寫入，否則列出衝突。`lane`：通道內不交叉的排序。`cleanup`：合併共線線段 |
+| `previews`、`tracedrop` | 審查用 PDF／PNG 與 1:1 試合頁；某個 net 的壓降與溫升 |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
@@ -173,8 +175,8 @@ python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
 
 | 腳本 | 用途 | 執行環境 |
 |---|---|---|
-| `export_previews.py` | 走線、裝件、內層預覽（PDF＋PNG）與 A4／A3 的 1:1 試合 PDF | KiCad 的 Python |
-| `trace_drop.py` | 沿某個 net 的走線估算到各負載的壓降與 IPC-2221 溫升 | KiCad 的 Python |
+| `export_previews.py` | 走線、裝件、內層預覽（PDF＋PNG）與 A4／A3 的 1:1 試合 PDF（同 `kcp previews`） | Python 3.9 以上 |
+| `trace_drop.py` | 沿某個 net 的走線估算到各負載的壓降與 IPC-2221 溫升（同 `kcp tracedrop`） | Python 3.9 以上 |
 | `gerber_readback.py` | 從 X2 屬性讀出各層用途與銅層順序、板框尺寸、PTH／NPTH 孔與槽孔數，可比對預期值 | Python 3.8 以上 |
 | `compare_gerbers.py` | 比對兩包 Gerber／鑽孔檔的幾何（直線、圓弧、焊盤、區域、孔、槽孔） | Python 3.8 以上 |
 

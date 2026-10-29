@@ -230,3 +230,16 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   （移動、排列、fit check）、`previews`、`tracedrop`。
 - 範例過程發現並修正：`kcp drc` 在暫存複本上跑時沒有帶 fp-lib-table；`gerber_readback.py` 在 cp950 主控台印 Ø 會當掉。
 - C6 估算發現：每顆驅動器 100 µF 時，兩軸同時煞車可把 24 V 母線推到約 28 V（TMC2209 上限 29 V），改為 470 µF。
+
+### Phase 3 結果（2026-10-29）
+
+- CLI 新增：`place fit-check|move|row|edge`、`route path|cleanup|lane`、`previews`、`tracedrop`。
+  `route.bus`（扇出、拒絕會交叉的順序）與 `route.lane_order`（playbook §3 的排序規則，回報交叉對）。
+- `scripts/export_previews.py`、`trace_drop.py` 改成 kcp 的薄包裝，參數不變，任何 Python 3.9+ 可跑；
+  `trace_drop.py` 在 DRAFT-03 實板上的輸出與舊 pcbnew 版逐字相同。
+- 範例改用 `place.array`（兩個驅動器單元）與 `route.bus`（相線、DIR／STEP）重寫；
+  `compare_gerbers.py` 比對 Phase 2 製造包：**幾何完全相同**。重建兩次，板檔逐位元組相同。
+- 修正：`place.fit_check` 原本把重疊的矩形判成「相接」（間隙 0），改用分離軸測試；
+  KiCad 會替沒有符號的安裝孔補上隨機 UUID 的欄位，改由 `place_footprint` 先寫好。
+- SKILL.md 與 references（layout-rules、routing-playbook、checks-and-delivery、kicad-scripting 全面改寫）
+  改成「呼叫哪個工具」。測試共 67 個。

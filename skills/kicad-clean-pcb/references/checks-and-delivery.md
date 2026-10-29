@@ -9,9 +9,14 @@
    - schematic parity.
 
    ```bash
-   kicad-cli sch erc --severity-all --exit-code-violations --output erc.rpt board.kicad_sch
-   kicad-cli pcb drc --refill-zones --schematic-parity --severity-all --exit-code-violations --output drc.rpt board.kicad_pcb
+   python <skill>/kcp erc board.kicad_sch
+   python <skill>/kcp drc board.kicad_pcb --refill --parity
    ```
+
+   Both summarise kicad-cli's JSON reports by type and exit 1 on any violation, unconnected item
+   or parity issue. `--full` adds the whole report. The raw commands are
+   `kicad-cli sch erc --format json --severity-all ...` and
+   `kicad-cli pcb drc --format json --refill-zones --schematic-parity --severity-all ...`.
 
    Never reach zero by excluding rules, loosening widths, editing the netlist or adding
    exclusions. A warning that genuinely has a reason goes into the delivery summary.
@@ -44,8 +49,8 @@
 
 ## 2. 1:1 fit check
 
-- `scripts/export_previews.py` writes a portrait A4 (A3 if needed) 1:1 PDF. It contains copper,
-  silkscreen, fab outlines and reference layers such as module outlines.
+- `kcp previews` (or `scripts/export_previews.py`) writes a portrait A4 (A3 if needed) 1:1 PDF.
+  It contains copper, silkscreen, fab outlines and reference layers such as module outlines.
 - **Printing.** The user prints at "Actual size / 100 %" with scaling off. They measure the
   printed outline first to confirm the scale, then lay the real parts, modules and terminals on
   it. They check:

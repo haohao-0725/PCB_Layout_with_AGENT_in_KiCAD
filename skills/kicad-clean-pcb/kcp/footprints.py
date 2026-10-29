@@ -165,7 +165,10 @@ def place_footprint(lib_fp: Node, lib_id: str, ref: str, at: Tuple[float, float]
         existing["Value"][2] = QStr(value)
     last_prop = fp.all("property")[-1] if fp.all("property") else fp.get("at")
     insert_at = fp.index(last_prop) + 1
-    for name, text in (fields or {}).items():
+    # KiCad 10 gives every board footprint Datasheet and Description fields; write them here with
+    # stable UUIDs, or KiCad adds them with random ones on every save.
+    fields = {"Datasheet": "", "Description": "", **(fields or {})}
+    for name, text in fields.items():
         if name in ("Reference", "Value", "Footprint"):
             continue
         if name in existing:

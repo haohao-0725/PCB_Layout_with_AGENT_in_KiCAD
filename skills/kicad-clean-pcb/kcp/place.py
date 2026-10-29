@@ -127,6 +127,37 @@ def courtyard_shapes(fp: Footprint) -> List[g.Shape]:
     return shapes
 
 
+def _project(points, axis):
+    values = [p[0] * axis[0] + p[1] * axis[1] for p in points]
+    return min(values), max(values)
+
+
+def overlaps(a: g.Shape, b: g.Shape, eps: float = 1e-3) -> bool:
+    """True when two courtyard shapes overlap by more than eps (touching is fine).
+    Polygons are treated as convex (separating-axis test); circles are point shapes with a radius."""
+    if a.kind == "point" and b.kind == "point":
+        return g.dist(a.pts[0], b.pts[0]) < a.radius + b.radius - eps
+    if a.kind == "point" or b.kind == "point":
+        circle, poly = (a, b) if a.kind == "point" else (b, a)
+        c = circle.pts[0]
+        if g.point_in_polygon(c, poly.pts):
+            return True
+        edge = min(g.point_seg_dist(c, p, q) for p, q in g.polygon_edges(poly.pts))
+        return edge < circle.radius - eps
+    for poly in (a, b):
+        for p, q in g.polygon_edges(poly.pts):
+            axis = (q[1] - p[1], p[0] - q[0])
+            length = (axis[0] ** 2 + axis[1] ** 2) ** 0.5
+            if length < 1e-12:
+                continue
+            axis = (axis[0] / length, axis[1] / length)
+            a0, a1 = _project(a.pts, axis)
+            b0, b1 = _project(b.pts, axis)
+            if a1 <= b0 + eps or b1 <= a0 + eps:
+                return False
+    return True
+
+
 def fit_check(board: Board, keepouts: Iterable[Tuple[float, float, float, float, str]] = (),
               edge_min: float = 0.0, ignore: Iterable[str] = ()) -> Dict:
     """Courtyard overlaps between parts on the same side, parts closer than edge_min to the board
@@ -134,13 +165,14 @@ def fit_check(board: Board, keepouts: Iterable[Tuple[float, float, float, float,
     skip = set(ignore)
     parts = [fp for fp in board.footprints if fp.ref not in skip]
     shapes = {fp.ref: courtyard_shapes(fp) for fp in parts}
-    overlaps = []
+    overlaps_ = overlaps
+    found = []
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
             if a.side != b.side or not shapes[a.ref] or not shapes[b.ref]:
                 continue
-            if min(g.gap(s, t) for s in shapes[a.ref] for t in shapes[b.ref]) < -1e-4:
-                overlaps.append([a.ref, b.ref])
+            if any(overlaps_(s, t) for s in shapes[a.ref] for t in shapes[b.ref]):
+                found.append([a.ref, b.ref])
     outline = board.outline_bbox()
     edge = []
     if outline:
@@ -155,6 +187,6 @@ def fit_check(board: Board, keepouts: Iterable[Tuple[float, float, float, float,
     for x0, y0, x1, y1, reason in keepouts:
         zone = g.Shape("poly", [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
         for fp in parts:
-            if any(g.gap(zone, s) < -1e-4 for s in shapes[fp.ref]):
+            if any(overlaps_(zone, s) for s in shapes[fp.ref]):
                 blocked.append({"ref": fp.ref, "keepout": reason})
-    return {"ok": not (overlaps or edge or blocked), "overlaps": overlaps, "edge": edge, "keepouts": blocked}
+    return {"ok": not (found or edge or blocked), "overlaps": found, "edge": edge, "keepouts": blocked}

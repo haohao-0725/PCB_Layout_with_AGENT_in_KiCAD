@@ -22,12 +22,22 @@ List the width and clearance of every net group (netclasses): signals (e.g. 0.3 
 power, high-current outputs, main supply.
 
 **A netclass clearance applies to everything passing that net's pads.** If a power netclass has
-a larger clearance, signal tracks passing a power pad must keep that distance too.
+a larger clearance, signal tracks passing a power pad must keep that distance too. `kcp route
+path` (and `kcp.route.Router`) applies exactly this rule: the larger clearance of the two nets.
+
+Save the layer roles as JSON next to the board, e.g. `{"F.Cu": "horizontal", "In1.Cu": "plane",
+"In2.Cu": "plane", "B.Cu": "vertical"}` (examples in the repository's `examples/layer-plans/`).
+`kcp lint --layer-plan` then measures each layer's main-direction conformity and flags tracks on
+plane layers.
 
 ## 2. Routing order
 
-Route one function group at a time. After each group, run DRC and look at a close-up. With git,
-commit once per group.
+Route one function group at a time. After each group, run `kcp drc` and `kcp lint --layer-plan`
+and look at a close-up. With git, commit once per group.
+
+Write each route as pad → bend points → pad with `kcp route path` (or `Router.path` in a
+generator). It refuses anything that is not 0/45/90° or that comes closer to other copper than
+the clearance, and lists every conflict instead of writing; change the path, never the rules.
 
 1. Main supply: entry → fuse → protection → trunk → branches
 2. High-current outputs (motor phases etc.)
@@ -52,6 +62,10 @@ the board finished while any remain.
   line turning right crosses every line to its right that is still going down. So the line
   furthest right must turn off first, which means its target is the nearest. If lines go both
   up and down, look for cycles. If there is one, move some lines to another layer.
+  `kcp route lane --lines '[{"net": ..., "exit": ..., "turn": "right"}]' --entry A,B,C` returns
+  the crossing-free order and every pair that would cross with the current order. For a row of
+  pins fanning out to a row of terminals, `kcp.route.bus` routes them side by side and refuses
+  lines that change order.
 - **Change layers on THT pads.** A through-hole pad exists on every layer, so a track can change
   layer on it without a via. Power and phase tracks can often reach zero vias this way.
 - **Threading between pins.**
@@ -95,12 +109,13 @@ the board finished while any remain.
 
 ## 6. Appearance
 
-- **Clean up the geometry.** Merge collinear segments, delete zero-length ones, and never
-  squeeze through obstacles with small jogs.
+- **Clean up the geometry.** `kcp route cleanup` merges collinear segments and deletes
+  zero-length ones. Never squeeze through obstacles with small jogs; `kcp lint` counts S-bend
+  jogs shorter than twice the track width.
 - **Repeated units route identically.** Differential pairs stay paired on one layer.
 - **Look before showing.** After routing, export full-board and per-layer previews
-  (`scripts/export_previews.py`) plus close-ups of dense areas. Review them yourself before
-  showing the user.
+  (`kcp previews`, or `scripts/export_previews.py`) plus close-ups of dense areas. Review them
+  yourself before showing the user.
 
 ## 7. When stuck
 

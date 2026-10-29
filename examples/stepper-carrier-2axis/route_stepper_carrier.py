@@ -18,7 +18,7 @@ sys.path.insert(0, str(HERE))
 
 from kcp.board import BoardBuilder  # noqa: E402
 from kcp.model import NetClasses  # noqa: E402
-from kcp.route import Router, cleanup  # noqa: E402
+from kcp.route import Router, bus, cleanup  # noqa: E402
 
 import build_stepper_carrier as design  # noqa: E402
 
@@ -73,20 +73,20 @@ def power(r: Router) -> None:
 
 
 def phases(r: Router) -> None:
-    """Motor phases on F.Cu: straight out of the driver, one 45-degree fan-out to the terminal."""
+    """Motor phases on F.Cu: a bus from the driver's 2.54 mm pins to the terminal's 5.08 mm pins,
+    straight out and one 45-degree fan-out (the order is the same at both ends, so nothing crosses)."""
     for driver, term, axis in (("A1", "J2", "X"), ("A2", "J3", "Y")):
-        for pin, tpin, coil in ((11, 1, "1B"), (12, 2, "1A"), (13, 3, "2A"), (14, 4, "2B")):
-            a, b = r.pad(driver, pin), r.pad(term, tpin)
-            dy = b[1] - a[1]
-            r.path(f"{axis}_{coil}", "F.Cu", None, [a, (PHASE_BEND_X, a[1]), (PHASE_BEND_X - abs(dy), b[1]), b])
+        lines = [(f"{axis}_{coil}", r.pad(driver, pin), r.pad(term, tpin))
+                 for pin, tpin, coil in ((11, 1, "1B"), (12, 2, "1A"), (13, 3, "2A"), (14, 4, "2B"))]
+        bus(r, lines, "F.Cu", bend=PHASE_BEND_X)
 
 
 def mcu(r: Router) -> None:
     """DIR and STEP straight across to CN11; EN through the pull-up junction to an inner-row pin."""
     p = r.pad
     for driver, axis, dir_pin, step_pin in (("A1", "X", 9, 11), ("A2", "Y", 41, 43)):
-        r.path(f"{axis}_DIR", "F.Cu", None, [p(driver, 1), p("CN11", dir_pin)])
-        r.path(f"{axis}_STEP", "F.Cu", None, [p(driver, 2), p("CN11", step_pin)])
+        bus(r, [(f"{axis}_DIR", p(driver, 1), p("CN11", dir_pin)), (f"{axis}_STEP", p(driver, 2), p("CN11", step_pin))],
+            "F.Cu", bend=p(driver, 1)[0])
     # X_EN_N: EN -> junction under R1 -> 45 degrees down to the gap above CN11-27 -> CN11-28.
     en, pull, target = p("A1", 8), p("R1", 1), p("CN11", 28)
     lane = between_rows(target[1] - ROW)

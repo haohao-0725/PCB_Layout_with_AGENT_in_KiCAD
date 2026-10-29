@@ -14,10 +14,9 @@ description: >-
   for RF, high-speed memory, mains-powered or isolated power designs.
 license: MIT
 compatibility: >-
-  KiCad 10.0.x, tested on Windows 10. The kcp tools (inspect, lint, decisions, drc, erc) need
-  only Python 3.9+ and read .kicad_pcb files directly; drc/erc call kicad-cli. Two older board
-  scripts still need the Python that ships with KiCad (legacy pcbnew bindings, deprecated by
-  KiCad in favour of the IPC API). The Gerber tools need only Python 3.8+.
+  KiCad 10.0.x, tested on Windows 10. All bundled tools run on any Python 3.9+ (standard library
+  only) and read or write the KiCad files directly; no pcbnew bindings are needed. kicad-cli is
+  needed for DRC, ERC, netlists, previews and fab output; pdftoppm (Poppler) for PNG previews.
 metadata:
   version: "0.1.0"
 ---
@@ -98,9 +97,12 @@ tool could not run. Details in [Bundled tools and scripts](#bundled-tools-and-sc
 | 2 | `kcp decisions PCB_DECISIONS.md --checkpoint CP2` | Every blank row in Parts B and C; CP2 cannot pass while it exits 1 |
 | 3 | `kcp erc board.kicad_sch` | ERC errors and warnings by type |
 | 4 | `kcp inspect board.kicad_pcb --summary` | Real positions, rotations, courtyards and pad nets: read them, don't recompute them |
-| 4 | `kcp lint board.kicad_pcb --preset <A-preset>` | Part-row alignment and silkscreen over pads before showing the placement |
+| 4 | `kcp place row` / `edge` / `move`, then `kcp place fit-check --keepout ...` | Rows and edge connectors placed exactly; courtyard overlaps, edge distance, keep-outs in front of USB plugs |
+| 4 | `kcp lint board.kicad_pcb --preset <A-preset>`, `kcp previews board.kicad_pcb` | Row alignment and silkscreen over pads; the previews and the 1:1 fit-check PDF for CP4 |
+| 5 | `kcp route lane` before a group, `kcp route path` for each route | Crossing-free lane order; every path checked for 0/45/90° and clearance before it is written |
 | 5 | `kcp drc board.kicad_pcb` and `kcp lint ... --layer-plan plan.json` after each group | New DRC issues, unconnected nets left, zigzags, off-angle segments, vias, tracks on plane layers |
-| 6 | `kcp drc board.kicad_pcb --refill --parity`, final `kcp lint`, `kcp decisions ... --checkpoint CP6` | Native checks at zero, the lint table for the delivery summary, Part C results recorded |
+| 5 | `kcp tracedrop board.kicad_pcb --net ... --source ... --load ...` | Voltage drop and temperature rise of power tracks (Part C C1/C2) |
+| 6 | `kcp route cleanup`, `kcp drc board.kicad_pcb --refill --parity`, final `kcp lint`, `kcp decisions ... --checkpoint CP6` | Merged segments; native checks at zero; the lint table for the delivery summary; Part C results recorded |
 
 `kcp lint` numbers support the visual review; they never replace it.
 
@@ -331,34 +333,36 @@ Run `python <skill>/kcp <command> --help` for every option.
 | `decisions PCB_DECISIONS.md [--checkpoint CP0\|CP1\|CP2\|CP4\|CP6]` | Blank rows per Part, in any language (rows found by ID, answers by the `Yes/No` or `Decision` column). With `--checkpoint`, exit 1 while anything that checkpoint needs is blank or unconfirmed |
 | `drc board.kicad_pcb [--refill] [--parity]` | kicad-cli DRC summarised: violations by type, unconnected per net, parity. Runs on a temporary copy unless `--parity` is given, so nothing is written next to the board |
 | `erc board.kicad_sch` | kicad-cli ERC summarised by type |
+| `place fit-check\|move\|row\|edge board.kicad_pcb ...` | Courtyard overlaps, edge distance and keep-outs; move or rotate a footprint (pads and texts follow); line parts up; put a connector flush with an edge. Writes refuse while KiCad has the project open |
+| `route path board.kicad_pcb --net N --layer L --points "REF.PAD x,y REF.PAD" [--dry-run]` | Writes a 0/45/90° path only if it keeps the netclass clearance (larger of the two nets) to other copper and the edge; otherwise exit 1 with every conflict |
+| `route lane --lines JSON --entry A,B,C` / `route cleanup board.kicad_pcb` | Crossing-free order of lines in a lane, and the pairs that cross with the current order / merge collinear segments, drop zero-length ones |
+| `previews board.kicad_pcb --out-dir DIR` | Routing, assembly and inner-layer PDFs (+ PNG) and the 1:1 fit-check PDF on A4/A3 |
+| `tracedrop board.kicad_pcb --net N --source REF.PAD --load REF.PAD=A ...` | Voltage drop and IPC-2221 temperature rise along a net's tracks |
 
-Example layer plans are in the repository's `examples/layer-plans/`.
+In a generator script, import the same modules: `kcp.wiring` (schematic from a wiring plan,
+netlist read-back), `kcp.board` and `kcp.footprints` (board building), `kcp.place`, `kcp.route`
+(`Router`, `bus`, `lane_order`, `cleanup`). See [references/kicad-scripting.md](references/kicad-scripting.md).
+Example layer plans and a complete generated board are in the repository's `examples/`.
 
 ### `scripts/`
 
 | Script | Purpose | Runs with |
 |---|---|---|
-| `export_previews.py` | Routing, assembly and inner-plane previews (PDF + PNG); 1:1 fit-check PDF on A4/A3 | KiCad's Python: `export_previews.py board.kicad_pcb --out previews` |
-| `trace_drop.py` | Voltage drop and IPC-2221 temperature rise along a net's tracks (T-junctions, arcs, parallel paths, temperature-corrected copper) | KiCad's Python: `trace_drop.py board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15 ...` |
+| `export_previews.py` | Same as `kcp previews`, with the original options | Any Python 3.9+: `export_previews.py board.kicad_pcb --out previews` |
+| `trace_drop.py` | Same as `kcp tracedrop`, with the original options and text output | Any Python 3.9+: `trace_drop.py board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15 ...` |
 | `gerber_readback.py` | Layer functions and copper order from X2 attributes, outline size, PTH/NPTH counts; compares against expected values | Any Python 3.8+: `gerber_readback.py fab.zip --expect-size 100x80 --expect-copper 4` |
 | `compare_gerbers.py` | Geometry diff of two Gerber/drill bundles (lines, arcs, flashes, regions, holes, slots) | Any Python 3.8+: `compare_gerbers.py old.zip new.zip` |
 
-Where KiCad's Python lives:
-
-- Windows: `C:/Program Files/KiCad/<version>/bin/python.exe`; set `PYTHONUTF8=1`.
-- macOS: the Python inside `KiCad.app`.
-- Linux: the system Python with the `pcbnew` module installed.
-
-`kicad-cli` sits in the same folder on Windows. Only Windows has been tested.
+`kicad-cli` is found from `$KICAD_CLI`, `PATH`, or the usual install folder
+(Windows: `C:/Program Files/KiCad/<version>/bin/kicad-cli.exe`). Only Windows has been tested.
 
 ## Version notes
 
 - **Tested with KiCad 10.0.x.** `kicad-cli` options and Gerber file naming change between
   versions. Check `kicad-cli <command> --help` before relying on a flag. Identify Gerber layers
   by their `%TF.FileFunction` attribute, not by file extension.
-- **Python bindings.** `kcp` reads and writes the board files itself and never imports `pcbnew`.
-  `export_previews.py` and `trace_drop.py` still use the legacy SWIG `pcbnew` bindings, which
-  KiCad has deprecated in favour of the IPC API and plans to remove in a future major release;
-  they are being ported to `kcp`. The Gerber tools do not depend on KiCad.
+- **Python bindings.** Nothing bundled imports `pcbnew`: KiCad has deprecated the SWIG bindings
+  and plans to remove them in KiCad 11. `kcp` reads and writes the files itself and drives
+  `kicad-cli`; a live backend through KiCad's IPC API is optional (see the README).
 - **Board file format.** `kcp` reads KiCad 10 boards (nets written by name) and the older format
   with numbered nets.

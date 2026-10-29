@@ -94,8 +94,7 @@ This skill captures what fixed those problems, so the next board doesn't repeat 
 |---|---|---|
 | KiCad | **10.0.x** | `kicad-cli` options and Gerber file naming change between versions. The skill checks `--help` and reads Gerber layers from X2 attributes instead of file extensions |
 | OS | Windows 10 | macOS and Linux should work, but the paths in the docs are Windows-first and untested elsewhere |
-| Python for board scripts | KiCad's bundled Python | `export_previews.py` and `trace_drop.py` use the legacy SWIG `pcbnew` bindings. KiCad has deprecated them in favour of the IPC API and plans to remove them in a future major release; these two scripts will need porting then |
-| Python for `kcp` tools | 3.9+ (stdlib only) | Reads `.kicad_pcb` files directly, no `pcbnew`; only `kcp drc` / `kcp erc` call `kicad-cli` |
+| Python for `kcp` and the board scripts | 3.9+ (stdlib only) | Reads and writes the KiCad files directly; nothing imports `pcbnew` (deprecated, removed in KiCad 11). `kicad-cli` is used for DRC, ERC, netlists, previews and fab output |
 | Python for Gerber tools | 3.8+ (stdlib only) | `gerber_readback.py` and `compare_gerbers.py` need no KiCad |
 | Agents | Claude Code, Codex | Any agent that reads `SKILL.md` folders (the Agent Skills format) should work |
 
@@ -187,6 +186,9 @@ not run.
 | `lint` | Tidiness score against a preset (T, C or R), pass / warn / fail per metric. Thresholds live in `kcp/presets/lint.json`; pass your own copy with `--thresholds`. Give it a layer plan (`examples/layer-plans/`) to check each layer's main direction |
 | `decisions` | Blank rows in `PCB_DECISIONS.md`, in any language. `--checkpoint CP2` exits 1 while anything CP2 needs is unanswered |
 | `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC runs on a temporary copy, so nothing is written next to your board |
+| `place` | `fit-check` (courtyard overlaps, edge distance, keep-outs), `move`, `row`, `edge`. Writes refuse while KiCad has the project open |
+| `route` | `path`: pad → bend points → pad, written only if every segment is 0/45/90° and keeps the netclass clearance; otherwise a list of conflicts. `lane`: crossing-free order for a lane. `cleanup`: merge collinear segments |
+| `previews`, `tracedrop` | Review PDFs/PNGs and the 1:1 fit-check page; voltage drop and temperature rise of a net |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
@@ -211,14 +213,14 @@ On the board this skill came from, the lint separates the two versions clearly:
 
 | Script | What it does | Run with |
 |---|---|---|
-| `export_previews.py` | Routing, assembly and inner-plane previews (PDF + PNG) and a 1:1 fit-check PDF on A4/A3 | KiCad's Python |
-| `trace_drop.py` | Voltage drop and IPC-2221 temperature rise along a net's tracks, to each load | KiCad's Python |
+| `export_previews.py` | Routing, assembly and inner-plane previews (PDF + PNG) and a 1:1 fit-check PDF on A4/A3 (same as `kcp previews`) | Python 3.9+ |
+| `trace_drop.py` | Voltage drop and IPC-2221 temperature rise along a net's tracks, to each load (same as `kcp tracedrop`) | Python 3.9+ |
 | `gerber_readback.py` | Layer functions and copper order from X2 attributes, board outline size, PTH/NPTH hole and slot counts, with optional expected values | Python 3.8+ |
 | `compare_gerbers.py` | Geometry diff of two Gerber/drill bundles: lines, arcs, flashes, regions, holes and slots | Python 3.8+ |
 
 ```bash
 # Windows example; on Windows set PYTHONUTF8=1
-"C:/Program Files/KiCad/10.0/bin/python.exe" skills/kicad-clean-pcb/scripts/trace_drop.py board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15 --load J5.1=0.2
+python skills/kicad-clean-pcb/scripts/trace_drop.py board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15 --load J5.1=0.2
 python skills/kicad-clean-pcb/scripts/gerber_readback.py fab.zip --expect-size 100x80 --expect-copper 4 --markdown
 python skills/kicad-clean-pcb/scripts/compare_gerbers.py old.zip new.zip
 ```

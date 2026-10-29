@@ -8,10 +8,12 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
 
 ### Connectors and access
 - **Connectors sit on the board edge with the cable entry facing out.** Mark pin 1 on every
-  connector and terminal block (filled triangle).
+  connector and terminal block (filled triangle). `kcp place edge` puts a courtyard flush with an
+  edge.
 - **Keep operating interfaces free.** USB ports, debug headers, buttons and jumpers on plugged-in
   modules are used while the board runs. Put nothing tall in front of them, and leave room for
-  the plug and its cable. List them at stage 1 and check them on the 1:1 print.
+  the plug and its cable. List them at stage 1 and check them on the 1:1 print. Give them to
+  `kcp place fit-check --keepout x0,y0,x1,y1,reason` so every placement change is checked.
 - **Don't duplicate terminals a module already has.** For example, a current-sense module with
   its own screw terminals needs no second shunt terminal on the carrier; wire it off-board.
 - **Ask before changing a harness pin order.** Reordering a connector to match the board's
@@ -35,13 +37,14 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
 - **Legible.** Text height ≥ 1.0 mm and line width ≥ 0.15 mm, or the fab minimum if larger.
   Keep a consistent orientation.
 - **Clear of everything.** No text on pads, no overlaps, nothing over other parts' outlines.
+  `kcp lint` reports text and lines over pads; DRC reports silkscreen overlaps.
 - **Short names.** If a name doesn't fit, shorten it rather than shrinking the font.
 
 ### Board edge and size
 - **Mounting holes.** Put them in the corners.
 - **Copper keeps off the edge.** Keep ≥ 0.5 mm, or the fab rule if larger.
 - **Check the biggest parts when shrinking.** Electrolytics, fuse holders and terminals must not
-  have courtyards that overlap each other or crowd the edge.
+  have courtyards that overlap each other or crowd the edge: `kcp place fit-check --edge-min`.
 
 ## 2. Tidy & readable (T)
 
@@ -64,7 +67,9 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
 ### Passives
 - **Same-function resistors form one aligned row:** same orientation, same pitch, same line.
   Different functions get different rows (e.g. termination resistors in one row, series
-  resistors toward the MCU in another).
+  resistors toward the MCU in another). Place a row with `kcp place row`; `kcp lint` reports the
+  worst misalignment of same-prefix rows. Place a repeated unit once and copy it with
+  `kcp.place.array`.
 - **Position follows function.**
   - Termination resistors sit at the receiver inputs.
   - Series resistors sit on the way to the MCU.

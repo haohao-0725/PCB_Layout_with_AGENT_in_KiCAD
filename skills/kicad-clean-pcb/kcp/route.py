@@ -205,14 +205,76 @@ def bend(a: Point, b: Point, first: str = "h") -> List[Point]:
     return [a, corner, b]
 
 
-def lane_order(exits: Dict[str, float], direction: int = 1) -> List[str]:
-    """Order of lines in a lane so none crosses another when it turns off.
+def lane_order(lines: Sequence[Dict], entry: Optional[Sequence[str]] = None) -> Dict:
+    """Order of lines across a lane so that none crosses another when it turns off
+    (routing-playbook.md §3).
 
-    exits: line -> position where it leaves the lane, measured along the lane.
-    For lines that turn the same way, the one leaving first must be on the outside of the turn
-    (playbook: the line furthest right turns off first). direction=+1 lists them outside-in for
-    turns to the right of travel."""
-    return sorted(exits, key=lambda k: exits[k] * direction)
+    lines: [{"net": "A", "exit": 12.5, "turn": "right" | "left"}, ...]; `exit` is the distance
+    along the lane where the line leaves it, `turn` the side it leaves to (seen in the direction of
+    travel). A line turning right crosses every line to its right that is still in the lane, so the
+    rightmost line must leave first; mirrored for left turns; a right-turner left of a left-turner
+    always crosses it.
+
+    Returns the crossing-free order (left to right, seen in the direction of travel) and, when
+    `entry` (the order the lines arrive in) is given, the pairs that would cross with that order.
+    Fix crossings by changing the entry order (pin order, resistor-row order, IC orientation)
+    before reaching for a via."""
+    by_net = {l["net"]: l for l in lines}
+    left = sorted((l for l in lines if l.get("turn", "right") == "left"), key=lambda l: l["exit"])
+    right = sorted((l for l in lines if l.get("turn", "right") != "left"), key=lambda l: -l["exit"])
+    order = [l["net"] for l in left] + [l["net"] for l in right]
+    result: Dict = {"order": order}
+    if entry is not None:
+        unknown = [n for n in entry if n not in by_net]
+        if unknown:
+            raise ValueError(f"entry order names unknown lines: {unknown}")
+        crossings = []
+        for i, a in enumerate(entry):
+            for b in entry[i + 1:]:              # a is left of b
+                la, lb = by_net[a], by_net[b]
+                ta, tb = la.get("turn", "right"), lb.get("turn", "right")
+                if ta == "right" and tb == "right":
+                    cross = la["exit"] < lb["exit"]
+                elif ta == "left" and tb == "left":
+                    cross = lb["exit"] < la["exit"]
+                else:
+                    cross = ta == "right" and tb == "left"
+                if cross:
+                    crossings.append([a, b])
+        result["entry"] = list(entry)
+        result["crossings"] = crossings
+    return result
+
+
+def bus(router: "Router", lines: Sequence[Tuple[str, Point, Point]], layer: str, bend: float,
+        width: Optional[float] = None, axis: str = "x") -> List[List[Point]]:
+    """Several lines side by side from one row of pads to another, each with one 45-degree section,
+    all bending at the same coordinate (a fan-out such as 2.54 mm driver pins to 5.08 mm terminals).
+
+    lines: (net, start, end). axis 'x': lines leave the start along x, turn at x = bend, take the
+    diagonal to the end's y and run along x to the end ('y' swaps the roles). Refuses lines whose
+    order differs at the two ends, because they would have to cross."""
+    i, j = (0, 1) if axis == "x" else (1, 0)
+    by_start = [l[0] for l in sorted(lines, key=lambda l: l[1][j])]
+    by_end = [l[0] for l in sorted(lines, key=lambda l: l[2][j])]
+    if by_start != by_end:
+        raise RouteConflict(",".join(by_start), [{"what": f"lines change order ({by_start} -> {by_end}) and would cross",
+                                                  "net": "", "layer": layer, "near": list(lines[0][1]),
+                                                  "gap": 0.0, "required": 0.0}])
+    paths = []
+    for net, a, b in lines:
+        offset = b[j] - a[j]
+        toward = 1.0 if b[i] >= bend else -1.0
+        corner = [0.0, 0.0]
+        corner[i], corner[j] = bend + toward * abs(offset), b[j]
+        first = [0.0, 0.0]
+        first[i], first[j] = bend, a[j]
+        points = [a, tuple(first), tuple(corner), b]
+        if abs(offset) < 1e-9:
+            points = [a, b]
+        router.path(net, layer, width, points)
+        paths.append(points)
+    return paths
 
 
 def cleanup(builder: BoardBuilder, nets: Optional[Iterable[str]] = None) -> Dict[str, int]:
