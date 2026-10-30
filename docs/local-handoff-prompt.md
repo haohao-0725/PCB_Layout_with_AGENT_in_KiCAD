@@ -278,3 +278,17 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
 - 使用者同意公開 prpr 的模組實測尺寸（TMC2209、AM26LS32、Nucleo F446ZE 等）與 README 的 lint 對比數字。
 - 使用者同意合併回 main 並推上 GitHub；plugin 以使用者層級 settings.json 安裝（GitHub marketplace）。
 - 即時模式（IPC）尚未實測，需使用者開啟 KiCad API server。
+
+### 2026-10-30 冷啟動試跑與 0.3.0 修正
+
+- 冷啟動試跑：另一個沒有開發脈絡的 session，只靠 skill 文件從零做出 `led4ch`（2 層、4 路 12 V LED 驅動，
+  93.98 × 69.1 mm），ERC／DRC／parity 皆 0、Gerber 回讀通過。報告在分支 `claude/gallant-dirac-7ad866`
+  的 `trials/cold-start-2026-10-30/TRIAL_REPORT.md`（未合併）。
+- 依使用者指示修正報告建議的前 5 項（分支 `dev/trial-fixes`，版本 0.3.0）：
+  1. 安裝說明（擇一安裝、刪掉舊的複製版、開新 session）、SKILL.md 版本自檢、CLI↔MCP 對照表。
+  2. `tracedrop` 同號焊盤視為同一腳。
+  3. 2 層板走線預覽頂層最後畫；外層有鋪銅時每個外層另出一頁。
+  4. `place edge`／`fit-check` 納入絲印（KiCad 允許絲印碰到板邊、不允許超出）。
+  5. `kcp new` 專案樣板、`kcp fab`（MCP `export_fab`）、`kcp drc --refill --save`、`kcp.project.write_project`。
+- 範例改用新函式後重建：板子內容不變。測試 80 個，Python 3.10 與 KiCad 的 3.11 都通過。
+- 報告第 6–13 項（絲印自動擺放、查庫 footprint 工具、CP4 閘門語意、circuit-policy 補充、lint 小修等）尚未處理。

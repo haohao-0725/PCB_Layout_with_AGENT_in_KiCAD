@@ -110,6 +110,13 @@ This skill captures what fixed those problems, so the next board doesn't repeat 
 
 ## Install
 
+**Pick one method.** If you copied the skill folder into `~/.claude/skills/` before and now
+install the plugin, delete `~/.claude/skills/kicad-clean-pcb` first: with both installed, the
+name `kicad-clean-pcb` resolves to the copied folder and the agent may follow that older copy.
+Start a new session after installing or updating, because skills and MCP tools load when a
+session starts. To check, ask the agent to run `python <skill>/kcp --version`; it should print
+the version in `SKILL.md`.
+
 ### Claude Code: plugin marketplace (recommended)
 
 In a Claude Code session:
@@ -195,16 +202,20 @@ not run.
 | `inspect` | The board as JSON: outline size, layers and stackup, footprints with position, rotation, side, courtyard and pads, nets with netclass and routing stats, tracks, vias and zones. `--drc` adds unconnected items per net |
 | `lint` | Tidiness score against a preset (T, C or R), pass / warn / fail per metric. Thresholds live in `kcp/presets/lint.json`; pass your own copy with `--thresholds`. Give it a layer plan (`examples/layer-plans/`) to check each layer's main direction |
 | `decisions` | Blank rows in `PCB_DECISIONS.md`, in any language. `--checkpoint CP2` exits 1 while anything CP2 needs is unanswered |
-| `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC runs on a temporary copy, so nothing is written next to your board |
-| `place` | `fit-check` (courtyard overlaps, edge distance, keep-outs), `move`, `row`, `edge`. Writes refuse while KiCad has the project open |
+| `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC runs on a temporary copy, so nothing is written next to your board; `--refill --save` has KiCad fill the zones and save the board |
+| `place` | `fit-check` (courtyard overlaps, edge distance, silkscreen past the edge, keep-outs), `move`, `row`, `edge` (courtyard and silkscreen flush with the edge). Writes refuse while KiCad has the project open |
 | `route` | `path`: pad → bend points → pad, written only if every segment is 0/45/90° and keeps the netclass clearance; otherwise a list of conflicts. `lane`: crossing-free order for a lane. `cleanup`: merge collinear segments |
-| `previews`, `tracedrop` | Review PDFs/PNGs and the 1:1 fit-check page; voltage drop and temperature rise of a net |
+| `previews`, `tracedrop` | Review PDFs/PNGs (top layer drawn last; a page per outer layer when it has a pour) and the 1:1 fit-check page; voltage drop and temperature rise of a net |
+| `fab` | Gerbers + drill, a zip with README.txt and SHA256SUMS.txt, and a readback of the zip against the board (size, copper layers, PTH, NPTH) |
+| `new` | Starts a generator project: build, place, route and rebuild scripts for a placeholder board that passes every check, ready to replace with your wiring plan |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
 python skills/kicad-clean-pcb/kcp lint board.kicad_pcb --preset T --layer-plan examples/layer-plans/4L-S1.json --markdown
 python skills/kicad-clean-pcb/kcp decisions PCB_DECISIONS.md --checkpoint CP2
 python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
+python skills/kicad-clean-pcb/kcp fab board.kicad_pcb --out-dir fab --readme order_spec.txt
+python skills/kicad-clean-pcb/kcp new my_board --copper 2 && python my_board/rebuild_my_board.py
 ```
 
 On the board this skill came from, the lint separates the two versions clearly:
@@ -243,12 +254,16 @@ python -m unittest discover -s tests -v
 
 ## MCP server and live mode
 
-The same tools are available as an MCP server, one tool per `kcp` command (16 tools: inspect,
-lint, decisions, DRC, ERC, place, route, previews, trace drop, Gerber readback and compare).
-Read-only tools are marked as such; tools that write say so.
+The same tools are available as an MCP server, one tool per `kcp` command (17 tools: inspect,
+lint, decisions, DRC, ERC, place, route, previews, trace drop, fab output, Gerber readback and
+compare; the table is in `SKILL.md`). Read-only tools are marked as such; tools that write say so.
+The MCP tools check, place and route a board and write the fab files. Creating a schematic and a
+board from nothing needs an agent that can run Python (`kcp new`).
 
 - **Claude Code:** installing the plugin registers the server (`mcpServers` in `.claude-plugin/plugin.json`
-  runs `python <plugin>/skills/kicad-clean-pcb/kcp mcp`). It needs `python` on your PATH (3.9+).
+  runs `python <plugin>/skills/kicad-clean-pcb/kcp mcp`). It needs `python` on your PATH (3.9+);
+  where only `python3` exists (common on macOS and Linux), make `python` available first (for
+  example `python-is-python3` on Debian/Ubuntu), or the server does not start.
 - **Codex** (`~/.codex/config.toml`):
 
   ```toml

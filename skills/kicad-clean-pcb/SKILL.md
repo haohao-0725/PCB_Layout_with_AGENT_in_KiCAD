@@ -18,7 +18,7 @@ compatibility: >-
   only) and read or write the KiCad files directly; no pcbnew bindings are needed. kicad-cli is
   needed for DRC, ERC, netlists, previews and fab output; pdftoppm (Poppler) for PNG previews.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # KiCad PCB workflow with human checkpoints
@@ -40,6 +40,22 @@ This skill exists to prevent three failure modes:
 
 The cure is the same for all three. Settle preferences and decisions with the user in writing,
 at fixed checkpoints. Show the placement on a 1:1 printout before routing.
+
+## Before you start: which copy of the tools you have
+
+`<skill>` below is the folder that holds this SKILL.md. Installed as a Claude Code plugin, it is
+`~/.claude/plugins/cache/<marketplace>/kicad-clean-pcb/<version>/skills/kicad-clean-pcb`.
+
+- Run `python <skill>/kcp --version` once. It must print the `metadata.version` above. If there is
+  no `kcp` folder next to this file, or the version is older, an outdated copy of the skill was
+  loaded (often one copied to `~/.claude/skills/` before the plugin was installed). Tell the user
+  to remove that copy and start a new session (README, "Install"); don't work around it.
+- With the plugin, every `kcp` command is also an MCP tool (table in
+  [Bundled tools](#bundled-tools-and-scripts)). They give the same results; MCP tools appear only in
+  sessions started after the plugin was installed. If they are missing, use the CLI.
+- Creating a schematic or a board from nothing needs Python and the `kcp` library (`kcp new`,
+  stage 3). With only the MCP tools, the user draws the schematic and board in KiCad and the tools
+  check, place and route that board.
 
 ## The handshake file: `PCB_DECISIONS.md`
 
@@ -95,14 +111,16 @@ tool could not run. Details in [Bundled tools and scripts](#bundled-tools-and-sc
 |---|---|---|
 | 0 | `kcp decisions PCB_DECISIONS.md --checkpoint CP0` | Blank scope and Part A rows before asking for CP0 |
 | 2 | `kcp decisions PCB_DECISIONS.md --checkpoint CP2` | Every blank row in Parts B and C; CP2 cannot pass while it exits 1 |
+| 3 | `kcp new <folder> --copper 2\|4` (generator projects) | Build, place, route and rebuild scripts for a placeholder circuit that passes every check; replace its wiring plan, positions and routing groups |
 | 3 | `kcp erc board.kicad_sch` | ERC errors and warnings by type |
 | 4 | `kcp inspect board.kicad_pcb --summary` | Real positions, rotations, courtyards and pad nets: read them, don't recompute them |
-| 4 | `kcp place row` / `edge` / `move`, then `kcp place fit-check --keepout ...` | Rows and edge connectors placed exactly; courtyard overlaps, edge distance, keep-outs in front of USB plugs |
+| 4 | `kcp place row` / `edge` / `move`, then `kcp place fit-check --keepout ...` | Rows and edge connectors placed exactly (`edge` counts silkscreen lines outside the courtyard); courtyard overlaps, edge distance, silkscreen past the edge, keep-outs in front of USB plugs |
 | 4 | `kcp lint board.kicad_pcb --preset <A-preset>`, `kcp previews board.kicad_pcb` | Row alignment and silkscreen over pads; the previews and the 1:1 fit-check PDF for CP4 |
 | 5 | `kcp route lane` before a group, `kcp route path` for each route | Crossing-free lane order; every path checked for 0/45/90° and clearance before it is written |
 | 5 | `kcp drc board.kicad_pcb` and `kcp lint ... --layer-plan plan.json` after each group | New DRC issues, unconnected nets left, zigzags, off-angle segments, vias, tracks on plane layers |
 | 5 | `kcp tracedrop board.kicad_pcb --net ... --source ... --load ...` | Voltage drop and temperature rise of power tracks (Part C C1/C2) |
-| 6 | `kcp route cleanup`, `kcp drc board.kicad_pcb --refill --parity`, final `kcp lint`, `kcp decisions ... --checkpoint CP6` | Merged segments; native checks at zero; the lint table for the delivery summary; Part C results recorded |
+| 6 | `kcp route cleanup`, `kcp drc board.kicad_pcb --refill --save`, `kcp drc board.kicad_pcb --parity`, final `kcp lint`, `kcp decisions ... --checkpoint CP6` | Merged segments; zones filled in the board file (previews, lint fill areas and Gerbers need it); native checks at zero; the lint table for the delivery summary; Part C results recorded |
+| 6 | `kcp fab board.kicad_pcb --out-dir fab --readme spec.txt` | Gerbers + drill, a zip with README.txt (your spec + layer order) and SHA256SUMS.txt, and a readback of the zip against the board |
 
 `kcp lint` numbers support the visual review; they never replace it.
 
@@ -185,8 +203,9 @@ is missing and affects the circuit, footprints or fabrication.
 - **Source of truth.** Decide what the CAD source is.
   - Small boards: edit in KiCad.
   - Boards with many repeated units, or that will be revised against the real parts several
-    times: generator scripts (schematic, placement and routing kept separate). See
-    [references/kicad-scripting.md](references/kicad-scripting.md).
+    times: generator scripts (schematic, placement and routing kept separate). Start them with
+    `python <skill>/kcp new <folder> --copper 2` (or 4) and run its `rebuild_<name>.py` once
+    before changing anything. See [references/kicad-scripting.md](references/kicad-scripting.md).
 
   Write down "what to edit where". Never keep two editable copies.
 - **Structure.**
@@ -196,7 +215,9 @@ is missing and affects the circuit, footprints or fabrication.
 - **Netclasses.** Use separate classes for supply, high-current outputs and logic power. Widths
   and clearances come from stage 5 sizing.
 - **Silkscreen names.** Keep the functional name of each module and connector in one field
-  (e.g. `Silk`) that the PCB silkscreen reads, so a rename happens in one place.
+  (e.g. `Silk`) that the PCB silkscreen reads, so a rename happens in one place. Library
+  footprints keep that field hidden on F.Fab; show it with
+  `kcp.place.set_text(builder, ref, "Silk", (x, y), angle, layer="F.SilkS", hide=False)`.
 - **Checks.**
   - ERC: 0 errors and 0 warnings.
   - Export the netlist and check it against the wiring plan line by line.
@@ -226,7 +247,7 @@ Send the user:
 
 - a top-view preview,
 - close-ups of dense areas,
-- **the 1:1 fit-check PDF** from `scripts/export_previews.py`.
+- **the 1:1 fit-check PDF** from `kcp previews`.
 
 Ask them to print it at 100 %, measure the outline to confirm the scale, and then lay the real
 parts and modules on the paper. They check:
@@ -259,7 +280,7 @@ Read [references/routing-playbook.md](references/routing-playbook.md) first.
   After each group, run DRC and look at a close-up. With git, commit each group.
 - **Geometry and vias** follow Part A.
 - **Sizing.** Size power tracks for both voltage drop and temperature rise with
-  `scripts/trace_drop.py`, against the current target and ΔT limit in Part A. If either is too
+  `kcp tracedrop`, against the current target and ΔT limit in Part A. If either is too
   high, widen the track first. Then consider moving it to an outer layer or paralleling it on
   two layers. Only then propose heavier copper.
 - **Getting stuck.** If the same local problem fails three attempts, stop. Don't keep swapping
@@ -272,17 +293,21 @@ Read [references/checks-and-delivery.md](references/checks-and-delivery.md).
 
 - **Native checks at zero.** ERC, DRC with zones refilled, unconnected items, and schematic
   parity must all be zero. Don't get there by ignoring rules, loosening widths or adding
-  exclusions.
+  exclusions. A board written by a script has empty zones until
+  `kcp drc board.kicad_pcb --refill --save` has KiCad fill and save them.
 - **Every "Yes" in Part C** is executed and its result recorded.
 - **Visual review.** Review the whole board and each layer. Trace a few representative nets per
   group: clear order, no zigzags, no needless layer changes, tidy rows, readable silkscreen.
   DRC passing does not replace this. Put the `kcp lint --markdown` table in the delivery summary,
   and explain every warn or fail that stays.
-- **Fab files.**
+- **Fab files.** `kcp fab board.kicad_pcb --out-dir fab --readme spec.txt` does all of this:
   - Export Gerbers and Excellon drill files (PTH and NPTH separate).
-  - Run `scripts/gerber_readback.py` against the native board values.
-  - Take the layer-order table from its output. Inner-layer file extensions differ between KiCad
-    versions, so never infer the order from extensions.
+  - Zip them with README.txt (the board spec from the order spec, then the layer order) and
+    SHA256SUMS.txt.
+  - Read the zip back (`scripts/gerber_readback.py`) against the native board values: size,
+    copper layers, PTH and NPTH counts. Exit 1 if anything differs.
+  - The layer order comes from the X2 attributes. Inner-layer file extensions differ between
+    KiCad versions, so never infer the order from extensions.
 - **Order spec.** Write the spec, a message the user can paste to the fab, the questions to ask
   the fab, and suggested values for online order forms.
 - **Regenerated files.** If fab files are regenerated after the user has seen them, run
@@ -331,18 +356,37 @@ Run `python <skill>/kcp <command> --help` for every option.
 | `inspect board.kicad_pcb [--summary] [--refs R1,R2] [--no-pads] [--drc]` | Board as JSON: outline size, layers and stackup; footprints (ref, value, footprint, x/y/rotation, side, courtyard box, pads with number, net, position, shape, size, drill); nets (netclass, pads, segments, length, vias); track, via and zone statistics. `--drc` adds unconnected items per net from kicad-cli (~15 s on a large board) |
 | `lint board.kicad_pcb [--preset T\|C\|R] [--layer-plan plan.json] [--thresholds t.json] [--strict]` | Tidiness score, pass / warn / fail per metric: segments per mm and per connection, off-angle segments, turns per 10 mm, S-bend jogs, vias on power nets and per signal connection, layer main-direction conformity, tracks on GND plane layers, non-GND pours, dangling ends, silkscreen over pads (text boxes estimated), part-row alignment. Exit 1 on fail. Thresholds are in `kcp/presets/lint.json`; copy it and pass `--thresholds` to change them |
 | `decisions PCB_DECISIONS.md [--checkpoint CP0\|CP1\|CP2\|CP4\|CP6]` | Blank rows per Part, in any language (rows found by ID, answers by the `Yes/No` or `Decision` column). With `--checkpoint`, exit 1 while anything that checkpoint needs is blank or unconfirmed |
-| `drc board.kicad_pcb [--refill] [--parity]` | kicad-cli DRC summarised: violations by type, unconnected per net, parity. Runs on a temporary copy unless `--parity` is given, so nothing is written next to the board |
+| `drc board.kicad_pcb [--refill [--save]] [--parity]` | kicad-cli DRC summarised: violations by type, unconnected per net, parity. Runs on a temporary copy unless `--parity` or `--save` is given; `--refill --save` has KiCad write the filled zones into the board |
 | `erc board.kicad_sch` | kicad-cli ERC summarised by type |
-| `place fit-check\|move\|row\|edge board.kicad_pcb ...` | Courtyard overlaps, edge distance and keep-outs; move or rotate a footprint (pads and texts follow); line parts up; put a connector flush with an edge. Writes refuse while KiCad has the project open |
+| `place fit-check\|move\|row\|edge board.kicad_pcb ...` | Courtyard overlaps, edge distance, silkscreen past the edge and keep-outs; move or rotate a footprint (pads and texts follow); line parts up; put a part flush with an edge (courtyard and silkscreen lines; `--courtyard-only` to ignore the silkscreen). Writes refuse while KiCad has the project open |
 | `route path board.kicad_pcb --net N --layer L --points "REF.PAD x,y REF.PAD" [--dry-run]` | Writes a 0/45/90° path only if it keeps the netclass clearance (larger of the two nets) to other copper and the edge; otherwise exit 1 with every conflict |
 | `route lane --lines JSON --entry A,B,C` / `route cleanup board.kicad_pcb` | Crossing-free order of lines in a lane, and the pairs that cross with the current order / merge collinear segments, drop zero-length ones |
-| `previews board.kicad_pcb --out-dir DIR` | Routing, assembly and inner-layer PDFs (+ PNG) and the 1:1 fit-check PDF on A4/A3 |
-| `tracedrop board.kicad_pcb --net N --source REF.PAD --load REF.PAD=A ...` | Voltage drop and IPC-2221 temperature rise along a net's tracks |
+| `previews board.kicad_pcb --out-dir DIR` | Routing (top layer drawn last), assembly and inner-layer PDFs (+ PNG), one page per outer layer when an outer layer has a pour, and the 1:1 fit-check PDF on A4/A3 |
+| `tracedrop board.kicad_pcb --net N --source REF.PAD --load REF.PAD=A ...` | Voltage drop and IPC-2221 temperature rise along a net's tracks; pads sharing a number (fuse-holder clips) count as one pin |
+| `fab board.kicad_pcb --out-dir fab [--readme spec.txt] [--refill]` | Gerbers + drill into `fab/gerber/`, a zip with README.txt and SHA256SUMS.txt, and a readback of the zip against the board (size, copper layers, PTH, NPTH); exit 1 on a mismatch |
+| `new <folder> [--name N] [--copper 2\|4]` | A generator project that runs end to end: `build_N.py`, `place_N.py`, `route_N.py`, `rebuild_N.py`, `kcp_path.py` (finds this skill), `layer_plan.json` |
+
+**MCP tools.** The plugin's MCP server (`python <skill>/kcp mcp`) has one tool per command, with
+the same inputs and results (`{"ok", "exit_code", "result"}`):
+
+| CLI | MCP tool | CLI | MCP tool |
+|---|---|---|---|
+| `inspect` | `inspect_board` | `route path` | `route_path` |
+| `lint` | `lint_board` | `route cleanup` | `route_cleanup` |
+| `decisions` | `check_decisions` | `route lane` | `route_lane` |
+| `drc` | `run_drc` | `previews` | `export_previews` |
+| `erc` | `run_erc` | `tracedrop` | `trace_drop` |
+| `place fit-check` | `place_fit_check` | `fab` | `export_fab` |
+| `place move` | `place_move` | `scripts/gerber_readback.py` | `gerber_readback` |
+| `place row` | `place_row` | `scripts/compare_gerbers.py` | `compare_gerbers` |
+| `place edge` | `place_edge` | `new` | (CLI only: the scripts it writes need Python) |
 
 In a generator script, import the same modules: `kcp.wiring` (schematic from a wiring plan,
-netlist read-back), `kcp.board` and `kcp.footprints` (board building), `kcp.place`, `kcp.route`
-(`Router`, `bus`, `lane_order`, `cleanup`). See [references/kicad-scripting.md](references/kicad-scripting.md).
-Example layer plans and a complete generated board are in the repository's `examples/`.
+netlist read-back), `kcp.project` (project file: rules and netclasses), `kcp.board` and
+`kcp.footprints` (board building), `kcp.place`, `kcp.route` (`Router`, `bus`, `lane_order`,
+`cleanup`), `kcp.fab` (fab zip and readback). See
+[references/kicad-scripting.md](references/kicad-scripting.md). Example layer plans and a complete
+generated board are in the repository's `examples/`.
 
 ### `scripts/`
 

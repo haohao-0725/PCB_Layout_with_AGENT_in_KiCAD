@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 (prepared 2026-10-30, not yet tagged)
+
+Fixes from a cold-start trial: an agent with no development context built a new 2-layer board
+from the skill's docs alone and recorded where it got stuck.
+
+- `kcp new <folder> [--copper 2|4]`: a generator project (build, place, route and rebuild scripts,
+  `kcp_path.py` to find the skill, `layer_plan.json`) for a placeholder board that passes ERC,
+  the netlist check, the fit check, DRC with parity, lint (preset T) and the Gerber readback.
+- `kcp fab` (MCP `export_fab`): Gerbers + drill, a zip with README.txt and SHA256SUMS.txt, and a
+  readback of the zip against the board. Library: `kcp.fab`.
+- `kcp drc --refill --save` (MCP `run_drc(save=True)`) and `kcp.kicad_cli.refill_zones`: KiCad
+  fills the zones and saves the board file.
+- `kcp.project.write_project`: the `.kicad_pro` with design rules and netclasses (moved out of
+  the example's build script).
+- `kcp tracedrop`: pads sharing a number (both clips of a fuse holder) count as one pin; before,
+  only the last pad was used and the net could read as not connected.
+- `kcp previews`: copper layers drawn bottom first, so a B.Cu pour no longer hides the top-layer
+  tracks of a 2-layer board; one page per outer layer when an outer layer has a pour.
+- `kcp place edge` puts the courtyard and the silkscreen lines flush with the edge
+  (`--courtyard-only` for the old behaviour); `place fit-check` reports silkscreen past the edge
+  (`silk_edge`), which KiCad's DRC flags as `silk_edge_clearance`.
+- `SKILL.md`: a version check at the start, where the skill lives after a plugin install, the
+  CLI ↔ MCP tool table, and what needs Python rather than MCP alone. README: pick one install
+  method and remove an older copied skill folder; `python` vs `python3` for the MCP server.
+- The example's rebuild uses `kcp.project`, `kcp.kicad_cli.refill_zones` and `kcp.fab`; its board
+  is unchanged.
+
 ## 0.2.0 (prepared 2026-10-29, not yet tagged)
 
 - `kcp` board tools, standard-library Python 3.9+, no `pcbnew`:

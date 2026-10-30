@@ -83,6 +83,11 @@ agent 第一次用自動放置加格點繞線，DRC 全過，但結果是：
 
 ## 安裝
 
+**兩種方式擇一。** 如果你以前把 skill 資料夾複製到 `~/.claude/skills/`，現在改裝 plugin，請先刪掉
+`~/.claude/skills/kicad-clean-pcb`：兩份同時存在時，`kicad-clean-pcb` 這個名稱會指到複製的那份，agent
+可能照著舊版做。安裝或更新後請開新的 session，skill 和 MCP 工具是在 session 開始時載入的。要確認的話，
+請 agent 執行 `python <skill>/kcp --version`，印出的版本應該和 `SKILL.md` 裡的一樣。
+
 ### Claude Code：plugin marketplace（建議）
 
 在 Claude Code 對話中輸入：
@@ -156,16 +161,20 @@ agent 會先做範圍檢查、請你選預設風格，然後在專案裡建立 `
 | `inspect` | 把板子讀成 JSON：板框尺寸、層與疊層、footprint 的位置／角度／正反面／courtyard 與 pad、net 的 netclass 與走線統計、走線／via／鋪銅。加 `--drc` 會附上各 net 的未連線數 |
 | `lint` | 依預設風格（T、C、R）評整齊度，每項給 pass／warn／fail。門檻在 `kcp/presets/lint.json`，要改請複製一份再用 `--thresholds` 指定。給它 layer plan（`examples/layer-plans/`）就會檢查各層主方向 |
 | `decisions` | 列出 `PCB_DECISIONS.md` 的空白列，中英文都可以。`--checkpoint CP2` 在 CP2 需要的項目還有空白時回傳 1 |
-| `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案 |
-| `place` | `fit-check`（courtyard 重疊、離板邊距離、禁區）、`move`、`row`、`edge`。KiCad 開著專案時拒絕寫入 |
+| `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案；`--refill --save` 則由 KiCad 填銅並存回板檔 |
+| `place` | `fit-check`（courtyard 重疊、離板邊距離、絲印超出板邊、禁區）、`move`、`row`、`edge`（courtyard 與絲印一起貼齊板邊）。KiCad 開著專案時拒絕寫入 |
 | `route` | `path`：焊盤 → 轉折點 → 焊盤，每段都是 0／45／90° 且符合 netclass 間距才寫入，否則列出衝突。`lane`：通道內不交叉的排序。`cleanup`：合併共線線段 |
-| `previews`、`tracedrop` | 審查用 PDF／PNG 與 1:1 試合頁；某個 net 的壓降與溫升 |
+| `previews`、`tracedrop` | 審查用 PDF／PNG（頂層最後畫；外層有鋪銅時每個外層另出一頁）與 1:1 試合頁；某個 net 的壓降與溫升 |
+| `fab` | Gerber＋鑽孔檔、含 README.txt 與 SHA256SUMS.txt 的 zip，並把 zip 讀回來和板子比對（尺寸、銅層數、PTH、NPTH） |
+| `new` | 開一個產生器專案：build、place、route、rebuild 四個腳本，附一塊能通過所有檢查的示範板，再換成你的接線規劃 |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
 python skills/kicad-clean-pcb/kcp lint board.kicad_pcb --preset T --layer-plan examples/layer-plans/4L-S1.json --markdown
 python skills/kicad-clean-pcb/kcp decisions PCB_DECISIONS.md --checkpoint CP2
 python skills/kicad-clean-pcb/kcp drc board.kicad_pcb --refill
+python skills/kicad-clean-pcb/kcp fab board.kicad_pcb --out-dir fab --readme order_spec.txt
+python skills/kicad-clean-pcb/kcp new my_board --copper 2 && python my_board/rebuild_my_board.py
 ```
 
 用這個 skill 起源的那塊板子比較，lint 能清楚分出兩個版本：
@@ -197,11 +206,15 @@ python -m unittest discover -s tests -v
 
 ## MCP server 與即時模式
 
-同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 16 個：inspect、lint、decisions、DRC、ERC、
-擺放、走線、預覽、壓降、Gerber 回讀與比對）。唯讀工具會標示唯讀，會寫入的工具也會標示。
+同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 17 個：inspect、lint、decisions、DRC、ERC、
+擺放、走線、預覽、壓降、製造檔輸出、Gerber 回讀與比對；對照表在 `SKILL.md`）。唯讀工具會標示唯讀，會寫入的
+工具也會標示。MCP 工具負責檢查、擺放、走線與輸出製造檔；要從零建立原理圖和板子，需要能執行 Python 的
+agent（`kcp new`）。
 
 - **Claude Code：** 安裝 plugin 就會註冊（`.claude-plugin/plugin.json` 的 `mcpServers` 會執行
-  `python <plugin>/skills/kicad-clean-pcb/kcp mcp`）。PATH 上需要有 `python`（3.9 以上）。
+  `python <plugin>/skills/kicad-clean-pcb/kcp mcp`）。PATH 上需要有 `python`（3.9 以上）；只有 `python3`
+  的環境（macOS、Linux 常見）要先讓 `python` 可用（例如 Debian/Ubuntu 的 `python-is-python3`），否則
+  server 不會啟動。
 - **Codex**（`~/.codex/config.toml`）：
 
   ```toml

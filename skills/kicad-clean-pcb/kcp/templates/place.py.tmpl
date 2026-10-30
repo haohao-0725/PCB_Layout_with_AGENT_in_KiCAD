@@ -1,0 +1,78 @@
+"""Placement for __NAME__: board outline, ground pour, every footprint, then a fit check.
+
+Nets, values, fields and schematic links come from KiCad's own netlist of the schematic, so the
+board matches the schematic (DRC parity 0), the way "Update PCB from schematic" would make it.
+Positions are the parameters below (mm and degrees, KiCad's y axis points down); the routing
+script derives every track from the pads. Find pad positions and courtyards with
+`kcp inspect <board> --refs J1` after a first run instead of working them out by hand.
+
+The fit check reports courtyard overlaps, parts too close to the edge, silkscreen past the edge
+and parts in keep-outs. Before routing, show the previews and get the 1:1 print checked (CP4).
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import kcp_path  # noqa: F401  (puts kcp on sys.path)
+from kcp.board import BoardBuilder
+from kcp.footprints import FootprintLibrary, place_footprint
+from kcp.place import fit_check, set_text
+from kcp.wiring import read_netlist
+
+import build___NAME__ as design
+
+HERE = Path(__file__).resolve().parent
+COPPER = __COPPER__
+BOARD = (0.0, 0.0, 45.0, 30.0)                  # outline x0, y0, x1, y1 (mm)
+GND_LAYERS = ["B.Cu"] if COPPER == 2 else ["In1.Cu", "In2.Cu"]
+
+# ref: (x, y, rotation). One supply line along y = 12: J1 -> C1 -> R1 -> D1.
+PLACEMENT = {
+    "J1": (6.0, 12.0, 0),        # pin 1 (+5V) at the top
+    "C1": (13.0, 12.0, 270),     # pad 1 on the supply line, pad 2 (GND) below it
+    "R1": (20.0, 12.0, 0),
+    "D1": (39.54, 12.0, 180),    # anode (pad 2) faces R1
+}
+KEEPOUTS = []                                    # (x0, y0, x1, y1, reason), e.g. space in front of a USB plug
+SILK = {"J1": ((0.0, 5.0), 0)}                   # ref: (local position, angle) of its "Silk" field on F.SilkS
+
+
+def place(path: Path) -> dict:
+    components, pin_nets = read_netlist(HERE / f"{design.PROJECT}.kicad_sch")
+    missing = sorted(set(components) - set(PLACEMENT))
+    if missing:
+        raise SystemExit(f"no position for {', '.join(missing)}: add them to PLACEMENT")
+    b = BoardBuilder.new(copper=COPPER, thickness=1.6, title=design.DESIGN.title, revision=design.REVISION,
+                         date=design.DATE)
+    b.outline_rect(*BOARD)
+    outline = [(BOARD[0], BOARD[1]), (BOARD[2], BOARD[1]), (BOARD[2], BOARD[3]), (BOARD[0], BOARD[3])]
+    for layer in GND_LAYERS:
+        b.add_zone("GND", [layer], outline, name=f"GND {layer}", clearance=0.3, thermal_gap=0.5, spoke_width=0.5)
+
+    lib = FootprintLibrary(HERE)
+    for ref, comp in components.items():
+        x, y, rot = PLACEMENT[ref]
+        nets = {pin: net for (r, pin), net in pin_nets.items() if r == ref}
+        b.add_footprint(place_footprint(lib.load(comp.footprint), comp.footprint, ref, (x, y), rot, nets=nets,
+                                        fields=comp.fields, value=comp.value, path=comp.path,
+                                        seed=f"{design.PROJECT}/{ref}"))
+    for ref, at in design.HOLES.items():
+        b.add_footprint(place_footprint(lib.load(design.HOLE_FP), design.HOLE_FP, ref, at, 0, board_only=True,
+                                        seed=f"{design.PROJECT}/{ref}"))
+        set_text(b, ref, "Reference", (0.0, 0.0), 0, hide=True)
+
+    # Library footprints keep the "Silk" field hidden on F.Fab; show the ones you want on F.SilkS.
+    for ref, (local, angle) in SILK.items():
+        set_text(b, ref, "Silk", local, angle, layer="F.SilkS", hide=False)
+    b.add_text(f"{design.PROJECT} rev {design.REVISION}", (22.5, 27.0), "F.SilkS", 1.0)
+
+    b.save(path)
+    return fit_check(b.board(path), keepouts=KEEPOUTS)
+
+
+if __name__ == "__main__":
+    report = place(HERE / f"{design.PROJECT}.kicad_pcb")
+    print(json.dumps(report))
+    sys.exit(0 if report["ok"] else 1)

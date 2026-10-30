@@ -65,6 +65,11 @@
 
 ## 3. Fabrication files
 
+`kcp fab board.kicad_pcb --out-dir fab --readme spec.txt` runs every step below: Gerbers and
+drill files, the zip with README.txt and SHA256SUMS.txt, and the readback against the board. The
+commands show what it does and work on their own. Refill the zones first
+(`kcp drc board.kicad_pcb --refill --save`, or `kcp fab --refill`), or the pours are missing.
+
 - **Gerbers.** A 4-layer board needs 9 layers: F.Cu, In1.Cu, In2.Cu, B.Cu, F.Mask, B.Mask,
   F.SilkS, B.SilkS, Edge.Cuts. Keep X2 attributes enabled (the default), because the readback
   depends on them.

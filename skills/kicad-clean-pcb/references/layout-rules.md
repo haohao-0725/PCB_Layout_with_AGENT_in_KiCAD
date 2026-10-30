@@ -8,8 +8,9 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
 
 ### Connectors and access
 - **Connectors sit on the board edge with the cable entry facing out.** Mark pin 1 on every
-  connector and terminal block (filled triangle). `kcp place edge` puts a courtyard flush with an
-  edge.
+  connector and terminal block (filled triangle). `kcp place edge` puts a part flush with an
+  edge: its courtyard and its silkscreen lines, because many library terminals draw the pin-1
+  mark outside the courtyard and DRC flags silkscreen that crosses the edge.
 - **Keep operating interfaces free.** USB ports, debug headers, buttons and jumpers on plugged-in
   modules are used while the board runs. Put nothing tall in front of them, and leave room for
   the plug and its cable. List them at stage 1 and check them on the 1:1 print. Give them to

@@ -1,0 +1,47 @@
+"""Puts the kcp package on sys.path for this project's scripts. Import it before any `from kcp`.
+
+Search order: $KCP_SKILL (a kicad-clean-pcb skill folder, the one with kcp/ in it), the folder
+recorded when `kcp new` made this project, an installed kcp (pip install), the newest
+kicad-clean-pcb plugin in Claude Code's plugin cache, then ~/.claude/skills and ~/.agents/skills.
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+from pathlib import Path
+
+RECORDED = r"__KCP_SKILL__"
+
+
+def _version(text: str):
+    return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
+
+
+def _candidates():
+    if os.environ.get("KCP_SKILL"):
+        yield Path(os.environ["KCP_SKILL"])
+    yield Path(RECORDED)
+    yield None                                   # an installed kcp
+    cache = Path.home() / ".claude" / "plugins" / "cache"
+    plugins = sorted(cache.glob("*/kicad-clean-pcb/*/skills/kicad-clean-pcb"), key=lambda p: _version(p.parents[1].name))
+    yield from reversed(plugins)
+    for base in (Path.home() / ".claude" / "skills", Path.home() / ".agents" / "skills"):
+        yield base / "kicad-clean-pcb"
+
+
+def setup() -> Path:
+    for folder in _candidates():
+        if folder is None:
+            try:
+                import kcp
+            except ImportError:
+                continue
+            return Path(kcp.__file__).resolve().parent
+        if (folder / "kcp" / "__init__.py").is_file():
+            sys.path.insert(0, str(folder))
+            return folder / "kcp"
+    raise SystemExit("kcp not found: set KCP_SKILL to the kicad-clean-pcb skill folder (the one with kcp/ in it)")
+
+
+KCP = setup()

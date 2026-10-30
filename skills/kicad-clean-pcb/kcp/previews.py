@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Sequence, Union
 from . import kicad_cli
 from . import geometry as g
 from .board import translate_tree
-from .model import board_from_tree
+from .model import Board, board_from_tree
 from .sexpr import Node, QStr, dumps, load
 
 MARGIN = 8.0
@@ -53,6 +53,33 @@ def _set_paper(tree: Node, paper: str, width: Optional[float] = None, height: Op
         tree.insert(5, node)
 
 
+def pages(board: Board, extra_layers: Sequence[str] = ("Dwgs.User",)) -> Dict[str, tuple]:
+    """Preview name -> (layers in drawing order, extra kicad-cli options)."""
+    copper = board.copper_layers
+    tracked = {t.layer for t in board.tracks}
+    zoned = {layer for z in board.zones if not z.rule_area for layer in z.layers}
+    extra = [l for l in extra_layers if l]
+    # kicad-cli draws the layers in list order, so the bottom goes first and F.Cu last: otherwise a
+    # B.Cu ground pour covers every top-layer track.
+    shown = [l for l in reversed(copper) if l in ("F.Cu", "B.Cu") or l in tracked]
+    presets: Dict[str, tuple] = {
+        "routing": (shown + ["F.SilkS", "Edge.Cuts"] + extra, []),
+        "assembly": (["F.SilkS", "F.Fab", "Edge.Cuts"] + extra, ["--black-and-white", "--sketch-pads-on-fab-layers"]),
+    }
+    # A pour on an outer layer still hides the layer drawn under it, so each outer layer also gets
+    # a page of its own.
+    outer = [l for l in ("F.Cu", "B.Cu") if l in copper]
+    if any(l in zoned for l in outer):
+        for layer in outer:
+            if layer in zoned or layer in tracked:
+                silk = "F.SilkS" if layer == "F.Cu" else "B.SilkS"
+                presets[f"routing_{layer.replace('.', '')}"] = ([layer, silk, "Edge.Cuts"] + extra, [])
+    for layer in copper[1:-1]:
+        if layer in zoned or layer in tracked:
+            presets[f"inner_{layer.replace('.', '')}"] = ([layer, "Edge.Cuts"], [])
+    return presets
+
+
 def export(board_path: PathLike, out_dir: PathLike, dpi: int = 150, extra_layers: Sequence[str] = ("Dwgs.User",),
            fit_layers: Sequence[str] = ("F.Cu", "F.SilkS", "F.Fab", "Edge.Cuts"), png: bool = True) -> Dict:
     board_path = Path(board_path)
@@ -64,18 +91,8 @@ def export(board_path: PathLike, out_dir: PathLike, dpi: int = 150, extra_layers
         raise ValueError("the board has no objects")
     translate_tree(tree, MARGIN - box[0], MARGIN - box[1])
     width, height = box[2] - box[0] + 2 * MARGIN, box[3] - box[1] + 2 * MARGIN
-    board = board_from_tree(tree)
-    copper = board.copper_layers
-    tracked = {t.layer for t in board.tracks}
-    zoned = {layer for z in board.zones if not z.rule_area for layer in z.layers}
     extra = [l for l in extra_layers if l]
-    presets: Dict[str, tuple] = {
-        "routing": ([l for l in copper if l in ("F.Cu", "B.Cu") or l in tracked] + ["F.SilkS", "Edge.Cuts"] + extra, []),
-        "assembly": (["F.SilkS", "F.Fab", "Edge.Cuts"] + extra, ["--black-and-white", "--sketch-pads-on-fab-layers"]),
-    }
-    for layer in copper[1:-1]:
-        if layer in zoned or layer in tracked:
-            presets[f"inner_{layer.replace('.', '')}"] = ([layer, "Edge.Cuts"], [])
+    presets = pages(board_from_tree(tree), extra)
     pdftoppm = shutil.which("pdftoppm") if png else None
     written: List[str] = []
     stem = board_path.stem

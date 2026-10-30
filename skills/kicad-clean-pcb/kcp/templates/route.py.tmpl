@@ -1,0 +1,54 @@
+"""Routing for __NAME__, one function per group (routing-playbook.md §2).
+
+Every path is pad -> bend points -> pad, computed from the placed board's pad coordinates.
+Router.path raises RouteConflict and writes nothing when a segment is not at 0/45/90 degrees or
+comes closer to other copper or the board edge than the netclass clearance. GND has no tracks:
+every GND pad reaches the ground pour. More tools:
+- kcp.route.bus(router, [(net, start, end), ...], layer, bend, axis="x" or "y"): parallel lines
+  that keep their order (axis is the direction of the run before the bend);
+- Router.via(at, net): a via, checked like a path; prefer changing layers on a through-hole pad;
+- `kcp route lane --lines ...`: a crossing-free order for lines entering one lane.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import kcp_path  # noqa: F401  (puts kcp on sys.path)
+from kcp.board import BoardBuilder
+from kcp.model import NetClasses
+from kcp.route import Router, cleanup
+
+import build___NAME__ as design
+
+HERE = Path(__file__).resolve().parent
+
+
+def power(r: Router) -> None:
+    """+5V along the supply line: input -> decoupling capacitor -> LED resistor."""
+    p = r.pad
+    r.path("+5V", "F.Cu", None, [p("J1", 1), p("C1", 1), p("R1", 1)])
+
+
+def indicator(r: Router) -> None:
+    p = r.pad
+    r.path("LED_A", "F.Cu", None, [p("R1", 2), p("D1", 2)])
+
+
+GROUPS = [power, indicator]
+
+
+def route(path: Path) -> dict:
+    b = BoardBuilder.open(path)
+    b.remove(["segment", "arc", "via"])          # rerouting starts from a clean board
+    r = Router(b, NetClasses.from_project(path.with_suffix(".kicad_pro")))
+    for group in GROUPS:
+        group(r)
+    stats = cleanup(b)
+    b.save(path)
+    return {"groups": [g.__name__ for g in GROUPS], "segments": len(b.tree.all("segment")),
+            "vias": len(b.tree.all("via")), **stats}
+
+
+if __name__ == "__main__":
+    print(json.dumps(route(HERE / f"{design.PROJECT}.kicad_pcb")))

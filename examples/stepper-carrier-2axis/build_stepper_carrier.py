@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "skills" / "kicad-clean-pcb"))
 
 from kcp.footprints import tht_footprint  # noqa: E402
+from kcp.project import write_project  # noqa: E402
 from kcp.sexpr import dumps  # noqa: E402
 from kcp.wiring import (Design, Part, SymbolDef, bom_rows, write_lib_tables,  # noqa: E402
                         write_schematic, write_symbol_library)
@@ -176,6 +177,7 @@ DESIGN = Design(PROJECT, "2-axis stepper carrier for NUCLEO-F446ZE (kicad-clean-
 HOLES = {"H1": (3.5, 3.5), "H2": (122.5, 3.5), "H3": (3.5, 142.5), "H4": (122.5, 142.5)}
 
 # ---------------------------------------------------------------- netclasses and rules
+# Written to the project file by kcp.project.write_project.
 
 NETCLASSES = [
     # name, track width, clearance, patterns
@@ -187,26 +189,6 @@ RULES = {"min_clearance": 0.2, "min_track_width": 0.2, "min_via_diameter": 0.6, 
          "min_through_hole_diameter": 0.3, "min_hole_to_hole": 0.25, "min_hole_clearance": 0.25,
          "min_copper_edge_clearance": 0.5, "min_silk_clearance": 0.0, "min_text_height": 0.8,
          "min_text_thickness": 0.15, "solder_mask_to_copper_clearance": 0.0}
-
-
-def project_json(root_uuid: str) -> dict:
-    classes = [{"name": "Default", "clearance": 0.2, "track_width": 0.25, "via_diameter": 0.8, "via_drill": 0.4,
-                "priority": 2147483647}]
-    patterns = []
-    for i, (name, width, clearance, pats) in enumerate(NETCLASSES):
-        classes.append({"name": name, "clearance": clearance, "track_width": width, "via_diameter": 1.0,
-                        "via_drill": 0.5, "priority": i})
-        patterns += [{"netclass": name, "pattern": p} for p in pats]
-    return {
-        "board": {"design_settings": {"rules": RULES, "defaults": {"silk_line_width": 0.15, "silk_text_size_h": 1.0,
-                                                                   "silk_text_size_v": 1.0,
-                                                                   "silk_text_thickness": 0.15}}},
-        "meta": {"filename": f"{PROJECT}.kicad_pro", "version": 3},
-        "net_settings": {"classes": classes, "meta": {"version": 4}, "netclass_assignments": None,
-                         "netclass_patterns": patterns},
-        "sheets": [[root_uuid, "Root"]],
-        "text_variables": {},
-    }
 
 
 # ---------------------------------------------------------------- custom footprints (measured)
@@ -287,8 +269,7 @@ def build() -> dict:
     write_lib_tables(HERE, {LIB: f"{LIB}.kicad_sym"}, {LIB: f"{LIB}.pretty"})
     write_symbol_library(DESIGN, HERE / f"{LIB}.kicad_sym")
     info = write_schematic(DESIGN, HERE / f"{PROJECT}.kicad_sch")
-    (HERE / f"{PROJECT}.kicad_pro").write_text(json.dumps(project_json(info["root_uuid"]), indent=2) + "\n", encoding="utf-8",
-                                                newline="\n")
+    write_project(HERE / f"{PROJECT}.kicad_pro", info["root_uuid"], NETCLASSES, RULES)
     with (HERE / "bom.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=["refs", "qty", "value", "footprint"])
         writer.writeheader()

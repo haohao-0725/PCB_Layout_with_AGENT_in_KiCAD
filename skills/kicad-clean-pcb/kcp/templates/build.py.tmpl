@@ -1,0 +1,89 @@
+"""Wiring plan for __NAME__, and everything generated from it: the schematic, its symbol library,
+the project lib tables, the project file (design rules and netclasses) and bom.csv.
+
+This file is the source of truth for the circuit. Change a part, a net or a footprint here, then
+run rebuild___NAME__.py. The parts below are a placeholder circuit (power input, decoupling
+capacitor, LED with series resistor) that exercises every step: replace them with the wiring plan
+the user confirmed (PCB_DECISIONS.md, CP1).
+
+- Symbols are plain rectangles (kcp.wiring.SymbolDef): pin numbers and names only, all passive.
+- Footprints are KiCad library ids "Library:Footprint". Stock KiCad libraries work as they are;
+  for parts you measured, write a .pretty library (kcp.footprints.tht_footprint) and add it to
+  FOOTPRINT_LIBS.
+- Fields: "Silk" is the function name for the silkscreen (placed by place___NAME__.py),
+  "Description" goes into the schematic and the BOM.
+"""
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+import kcp_path  # noqa: F401  (puts kcp on sys.path)
+from kcp.project import write_project
+from kcp.wiring import Design, Part, SymbolDef, bom_rows, write_lib_tables, write_schematic, write_symbol_library
+
+HERE = Path(__file__).resolve().parent
+PROJECT = "__NAME__"
+LIB = "__NAME__"                 # symbol library nickname, written next to the schematic
+REVISION = "A"
+DATE = "__DATE__"
+FOOTPRINT_LIBS = {}              # nickname -> folder relative to this project, e.g. {"mine": "mine.pretty"}
+
+
+def two_pin(name, prefix, names=("", "")):
+    return SymbolDef(name, {"1": names[0], "2": names[1]}, ["1"], ["2"], width=5.08, prefix=prefix)
+
+
+SYMBOLS = {
+    "Conn_01x02": SymbolDef("Conn_01x02", {"1": "", "2": ""}, ["1", "2"], prefix="J", width=5.08),
+    "R": two_pin("R", "R"),
+    "C": two_pin("C", "C"),
+    "LED": two_pin("LED", "D", ("K", "A")),
+}
+
+PARTS = [
+    # ref, value, symbol, footprint, {pin: net (None = not connected)}, fields, group
+    Part("J1", "5V IN", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+         {"1": "+5V", "2": "GND"}, {"Silk": "5V", "Description": "Power input, pin 1 = +5 V"}, group="power"),
+    Part("C1", "100nF", "C", "Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm", {"1": "+5V", "2": "GND"},
+         {"Description": "Input decoupling"}, group="power"),
+    Part("R1", "1k", "R", "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal",
+         {"1": "+5V", "2": "LED_A"}, {"Description": "LED series resistor, about 3 mA"}, group="indicator"),
+    Part("D1", "LED", "LED", "LED_THT:LED_D5.0mm", {"1": "GND", "2": "LED_A"},
+         {"Description": "Power indicator; pad 1 = cathode"}, group="indicator"),
+]
+
+DESIGN = Design(PROJECT, "__NAME__", REVISION, DATE, LIB, SYMBOLS, PARTS,
+                ["Placeholder circuit from `kcp new`: replace PARTS with the confirmed wiring plan."], paper="A4")
+
+# Board-only footprints (no schematic symbol): mounting holes at (x, y) in mm.
+HOLES = {"H1": (3.5, 3.5), "H2": (41.5, 3.5), "H3": (3.5, 26.5), "H4": (41.5, 26.5)}
+HOLE_FP = "MountingHole:MountingHole_3.2mm_M3"
+
+# Netclasses: name, track width (mm), clearance (mm), net patterns ("*" wildcards). Size power
+# widths from the measured current (PCB_DECISIONS.md) and check them with `kcp tracedrop`.
+NETCLASSES = [
+    ("Power", 0.5, 0.2, ["+5V"]),
+]
+RULES = {}                       # overrides of kcp.project.DEFAULT_RULES from the fab's capabilities
+
+
+def build() -> dict:
+    problems = DESIGN.problems()
+    if problems:
+        raise SystemExit("wiring plan: " + "; ".join(problems))
+    write_lib_tables(HERE, {LIB: f"{LIB}.kicad_sym"}, FOOTPRINT_LIBS)
+    write_symbol_library(DESIGN, HERE / f"{LIB}.kicad_sym")
+    info = write_schematic(DESIGN, HERE / f"{PROJECT}.kicad_sch")
+    write_project(HERE / f"{PROJECT}.kicad_pro", info["root_uuid"], NETCLASSES, RULES)
+    with (HERE / "bom.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["refs", "qty", "value", "footprint"], lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(bom_rows(DESIGN))
+    return info
+
+
+if __name__ == "__main__":
+    build()
+    print(json.dumps({"schematic": f"{PROJECT}.kicad_sch", "parts": len(PARTS), "nets": len(DESIGN.nets())}))

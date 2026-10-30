@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kicad-clean-pcb"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deterministic KiCad board tools for the kicad-clean-pcb agent skill: inspect, tidiness lint, decision checks."
 readme = "README.md"
 license = { text = "MIT" }
@@ -33,7 +33,8 @@ kcp = "kcp.cli:main"
 [tool.setuptools]
 # The package lives inside the skill folder so a copied skill works without installing anything.
 package-dir = { "" = "skills/kicad-clean-pcb" }
-packages = ["kcp", "kcp.backends"]
+packages = ["kcp", "kcp.backends", "kcp.templates"]
 
 [tool.setuptools.package-data]
 kcp = ["presets/*.json"]
+"kcp.templates" = ["*.tmpl"]

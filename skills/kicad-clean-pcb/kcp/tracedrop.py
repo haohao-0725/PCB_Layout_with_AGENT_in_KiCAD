@@ -6,7 +6,7 @@ Method (same as the original scripts/trace_drop.py):
 - Builds the track graph of the net: straight and arc tracks; a track end that lands in the middle
   of another straight track splits it (T-junction); pads connect the track ends that land inside
   them. Tracks in parallel between the same two points (e.g. on two layers between the same THT
-  pads) are combined as parallel resistors.
+  pads) are combined as parallel resistors. Pads that share a number (REF.PAD) are one pin.
 - Takes the lowest-resistance path from the source pad to each load pad and adds the load currents
   along it; loops are treated as that tree, which over-estimates the drop.
 - Segment resistance = rho(T) * length / (width * copper thickness), rho(T) = 1.724e-8 ohm*m *
@@ -91,14 +91,23 @@ def analyse(board: Board, net: str, source: str, loads: Dict[str, float], outer_
             seg["r"] = rho * (s1 - s0) * 1e-3 / (t["width"] * 1e-3 * t["thick"] * 1e-6)
             links[frozenset((n0, n1))].append(seg)
 
-    pads = {f"{p.owner}.{p.number}": p for p in board.pads if p.net == net}
+    # Several pads can share one number (both clips of a fuse holder, a connector's shell tabs):
+    # they are one pin, joined inside the part, so all of them connect to the same node.
+    pads: Dict[str, List] = defaultdict(list)
+    for p in board.pads:
+        if p.net == net:
+            pads[f"{p.owner}.{p.number}"].append(p)
     nodes = {n for pair in links for n in pair}
-    for p in pads.values():
-        centre = _key(*p.at)
-        shape = p.shape()
-        for n in nodes:
-            if n != centre and g.gap(g.Shape("point", [n]), shape) <= 1e-6:
-                links[frozenset((centre, n))].append({"r": 0.0})
+    for group in pads.values():
+        first = _key(*group[0].at)
+        for p in group:
+            centre = _key(*p.at)
+            shape = p.shape()
+            for n in nodes:
+                if n != centre and g.gap(g.Shape("point", [n]), shape) <= 1e-6:
+                    links[frozenset((centre, n))].append({"r": 0.0})
+            if centre != first:
+                links[frozenset((first, centre))].append({"r": 0.0})
 
     graph = defaultdict(list)
     for pair, segs in links.items():
@@ -110,7 +119,7 @@ def analyse(board: Board, net: str, source: str, loads: Dict[str, float], outer_
     def node(name: str):
         if name not in pads:
             raise ValueError(f"{name} is not a pad on net {net} (use REF.PAD)")
-        return _key(*pads[name].at)
+        return _key(*pads[name][0].at)
 
     src = node(source)
     dist, prev = {src: 0.0}, {}

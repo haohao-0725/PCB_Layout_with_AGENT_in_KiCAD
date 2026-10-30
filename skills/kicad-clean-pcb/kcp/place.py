@@ -94,9 +94,37 @@ def set_text(builder: BoardBuilder, ref: str, field: str, local: Tuple[float, fl
     raise KeyError(f"{ref} has no field {field}")
 
 
-def at_edge(fp: Footprint, outline: g.BBox, side: str, inset: float = 0.0) -> Tuple[float, float]:
-    """Footprint origin that puts the courtyard flush with a board edge (minus inset)."""
+def _silk_layer(fp: Footprint) -> str:
+    return "B.SilkS" if fp.side == "back" else "F.SilkS"
+
+
+def silk_bbox(fp: Footprint, texts: bool = False) -> Optional[g.BBox]:
+    """Outer bounds of the footprint's silkscreen lines (stroke included); with texts=True also its
+    visible silkscreen texts (estimated boxes). Library parts often draw a pin-1 mark or the body
+    outline outside the courtyard."""
+    boxes = []
+    for gr in fp.graphics:
+        if gr.layer == _silk_layer(fp):
+            box = gr.bbox()
+            if box:
+                w = gr.width / 2
+                boxes.append((box[0] - w, box[1] - w, box[2] + w, box[3] + w))
+    if texts:
+        for t in fp.texts:
+            if t.layer == _silk_layer(fp) and not t.hidden and t.text:
+                box = g.bbox_of(t.box())
+                w = t.thickness / 2
+                boxes.append((box[0] - w, box[1] - w, box[2] + w, box[3] + w))
+    return g.bbox_union(boxes)
+
+
+def at_edge(fp: Footprint, outline: g.BBox, side: str, inset: float = 0.0, silk: bool = True) -> Tuple[float, float]:
+    """Footprint origin that puts the part flush with a board edge (minus inset). The part's extent
+    is its courtyard plus, with silk=True, its silkscreen lines: KiCad's DRC flags silkscreen that
+    crosses the board edge (silk_edge_clearance), touching is fine."""
     box = fp.courtyard_bbox() or g.bbox_of(p.at for p in fp.pads)
+    if silk:
+        box = g.bbox_union([box, silk_bbox(fp)])
     x, y = fp.at
     if side == "left":
         return x + (outline[0] + inset - box[0]), y
@@ -161,7 +189,8 @@ def overlaps(a: g.Shape, b: g.Shape, eps: float = 1e-3) -> bool:
 def fit_check(board: Board, keepouts: Iterable[Tuple[float, float, float, float, str]] = (),
               edge_min: float = 0.0, ignore: Iterable[str] = ()) -> Dict:
     """Courtyard overlaps between parts on the same side, parts closer than edge_min to the board
-    edge (or outside it), and parts inside keep-out rectangles (x0, y0, x1, y1, reason)."""
+    edge (or outside it), silkscreen that crosses the board edge (lines, and texts by estimated
+    box), and parts inside keep-out rectangles (x0, y0, x1, y1, reason)."""
     skip = set(ignore)
     parts = [fp for fp in board.footprints if fp.ref not in skip]
     shapes = {fp.ref: courtyard_shapes(fp) for fp in parts}
@@ -183,10 +212,20 @@ def fit_check(board: Board, keepouts: Iterable[Tuple[float, float, float, float,
             margin = min(box[0] - outline[0], box[1] - outline[1], outline[2] - box[2], outline[3] - box[3])
             if margin < edge_min - 1e-4:
                 edge.append({"ref": fp.ref, "margin_mm": round(margin, 3)})
+    silk = []
+    if outline:
+        for fp in parts:
+            box = silk_bbox(fp, texts=True)
+            if not box:
+                continue
+            margin = min(box[0] - outline[0], box[1] - outline[1], outline[2] - box[2], outline[3] - box[3])
+            if margin < -1e-4:
+                silk.append({"ref": fp.ref, "margin_mm": round(margin, 3)})
     blocked = []
     for x0, y0, x1, y1, reason in keepouts:
         zone = g.Shape("poly", [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
         for fp in parts:
             if any(overlaps_(zone, s) for s in shapes[fp.ref]):
                 blocked.append({"ref": fp.ref, "keepout": reason})
-    return {"ok": not (found or edge or blocked), "overlaps": found, "edge": edge, "keepouts": blocked}
+    return {"ok": not (found or edge or silk or blocked), "overlaps": found, "edge": edge, "silk_edge": silk,
+            "keepouts": blocked}

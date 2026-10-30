@@ -14,12 +14,8 @@ Any Python 3.9+; needs kicad-cli (KiCad 10) and, for PNG previews, Poppler's pdf
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import shutil
-import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -27,7 +23,7 @@ SKILL = HERE.parents[1] / "skills" / "kicad-clean-pcb"
 sys.path.insert(0, str(SKILL))
 sys.path.insert(0, str(HERE))
 
-from kcp import kicad_cli  # noqa: E402
+from kcp import fab as fab_output, kicad_cli  # noqa: E402
 from kcp.backends.file import load_board, lock_files  # noqa: E402
 from kcp.lint import lint_board, load_layer_plan, to_markdown as lint_md  # noqa: E402
 from kcp.previews import export as export_previews  # noqa: E402
@@ -106,11 +102,7 @@ def pcb_steps() -> None:
     step("route", lambda: json.dumps(routing.route(PCB)))
 
     def refill():
-        result = kicad_cli.run(["pcb", "drc", "--refill-zones", "--save-board", "--format", "json",
-                                "--output", str(REPORTS / "drc_refill.json"), str(PCB)])
-        (REPORTS / "drc_refill.json").unlink(missing_ok=True)
-        if result.returncode not in (0, 5):
-            raise Failed(result.stderr or result.stdout)
+        kicad_cli.refill_zones(PCB)
         return "GND planes filled, board saved by KiCad"
     step("refill planes", refill)
 
@@ -157,47 +149,24 @@ def fab_steps() -> None:
     step("previews + 1:1 fit check", previews)
 
     def fab():
-        gerber_dir = FAB / "gerber"
-        if gerber_dir.exists():
-            shutil.rmtree(gerber_dir)
-        gerber_dir.mkdir(parents=True)
-        kicad_cli.export_gerbers(PCB, gerber_dir, GERBER_LAYERS)
-        kicad_cli.export_drill(PCB, gerber_dir)
-        files = sorted(p for p in gerber_dir.iterdir() if p.is_file() and p.suffix.lower() != ".gbrjob")
-        board = load_board(PCB)
-        box = board.outline_bbox()
+        box = load_board(PCB).outline_bbox()
         readme = (f"{PROJECT} rev {design.REVISION} - bare boards only, no assembly\n"
                   f"Size {box[2] - box[0]:g} x {box[3] - box[1]:g} mm, 4 layers, 1.6 mm FR-4, "
                   "outer 1 oz, inner 0.5 oz, HASL\n"
                   "Layer order: see LAYER_ORDER below (read back from the X2 attributes)\n"
                   "Min track 0.25 mm, min space 0.2 mm, min hole 0.8 mm; no vias\n"
                   "PTH and NPTH drill files are separate.\n")
-        sums = []
-        with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
-            for f in files:
-                archive.write(f, f.name)
-                sums.append(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}")
-            readback = subprocess.run([sys.executable, str(SKILL / "scripts" / "gerber_readback.py"), str(gerber_dir),
-                                       "--markdown"], capture_output=True, text=True, encoding="utf-8")
-            order = [line for line in readback.stdout.splitlines() if line.startswith("| L")]
-            archive.writestr("README.txt", readme + "\nLAYER_ORDER\n" + "\n".join(order) + "\n")
-            archive.writestr("SHA256SUMS.txt", "\n".join(sums) + "\n")
-        return f"{ZIP.relative_to(HERE)} ({len(files)} files)"
+        result = fab_output.export(PCB, FAB, ZIP.name, GERBER_LAYERS, readme, check=False)
+        return f"{ZIP.relative_to(HERE)} ({len(result['files'])} files)"
     step("Gerber + drill + zip", fab)
 
     def readback():
-        board = load_board(PCB)
-        box = board.outline_bbox()
-        pth = sum(1 for p in board.pads if p.kind == "thru_hole") + len(board.vias)
-        npth = sum(1 for p in board.pads if p.kind == "np_thru_hole")
-        result = subprocess.run([sys.executable, str(SKILL / "scripts" / "gerber_readback.py"), str(ZIP),
-                                 "--expect-size", f"{box[2] - box[0]:g}x{box[3] - box[1]:g}", "--expect-copper",
-                                 str(len(board.copper_layers)), "--expect-pth", str(pth), "--expect-npth", str(npth),
-                                 "--markdown"], capture_output=True, text=True, encoding="utf-8")
-        (REPORTS / "readback.md").write_text(result.stdout, encoding="utf-8", newline="\n")
-        if result.returncode:
-            raise Failed(result.stdout[-400:])
-        return f"size, 4 copper layers, {pth} PTH, {npth} NPTH match the board"
+        expect = fab_output.expected(load_board(PCB))
+        result = fab_output.readback(ZIP, expect)
+        (REPORTS / "readback.md").write_text(result["markdown"], encoding="utf-8", newline="\n")
+        if not result["ok"]:
+            raise Failed(result["markdown"][-400:])
+        return f"size, {expect['copper']} copper layers, {expect['pth']} PTH, {expect['npth']} NPTH match the board"
     step("Gerber readback", readback)
 
 

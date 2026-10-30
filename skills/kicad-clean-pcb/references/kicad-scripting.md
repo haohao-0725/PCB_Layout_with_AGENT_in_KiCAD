@@ -10,14 +10,40 @@ files directly, so it needs no `pcbnew`. KiCad has deprecated the SWIG `pcbnew` 
 to remove them in KiCad 11; **don't write new generators on SWIG.** A complete worked example is
 `examples/stepper-carrier-2axis/` in the skill's repository.
 
+## 0. Starting a project: `kcp new`
+
+```bash
+python <skill>/kcp new my_board --copper 2      # or --copper 4
+python my_board/rebuild_my_board.py             # run it once before changing anything
+```
+
+It writes the four scripts of §1 plus `kcp_path.py` and `layer_plan.json` for a placeholder
+circuit (input header, capacitor, resistor, LED, four mounting holes). The placeholder passes
+ERC, the netlist check, the fit check, DRC with parity, lint (preset T) and the Gerber readback,
+so any later failure comes from your change. Then, in this order:
+
+1. `build_<name>.py`: replace `SYMBOLS`, `PARTS`, `HOLES` and `NETCLASSES` with the confirmed
+   wiring plan (CP1, CP2). Custom footprints from measured numbers go in a `.pretty` folder
+   (`kcp.footprints.tht_footprint`) listed in `FOOTPRINT_LIBS`.
+2. `place_<name>.py`: `BOARD`, `PLACEMENT`, `KEEPOUTS`, `SILK`. Run `--until pcb` and read the
+   real pad positions and courtyards with `kcp inspect <board> --refs ...` before adjusting.
+3. After CP4: one function per group in `route_<name>.py`.
+4. `rebuild_<name>.py`: `PRESET`, `FAB_README` (the board spec from the order spec), and a
+   voltage-drop step for nets above about 1 A.
+
+**Finding kcp from a project folder.** The scripts start with `import kcp_path`, which puts kcp
+on `sys.path`: `$KCP_SKILL` first, then the skill folder recorded by `kcp new`, an installed kcp
+(`pip install`), the newest kicad-clean-pcb plugin in `~/.claude/plugins/cache/`, then
+`~/.claude/skills/` and `~/.agents/skills/`. Set `KCP_SKILL` when the skill moves.
+
 ## 1. Structure
 
 | Script | What it does | It is the source of truth for | kcp modules |
 |---|---|---|---|
-| `build_*.py` | The wiring plan: parts, the net on every pin, custom footprints from measured numbers, netclasses and rules. Writes the schematic, symbol library, lib tables, project file, BOM, manifest | The circuit | `kcp.wiring`, `kcp.footprints.tht_footprint` |
+| `build_*.py` | The wiring plan: parts, the net on every pin, custom footprints from measured numbers, netclasses and rules. Writes the schematic, symbol library, lib tables, project file, BOM, manifest | The circuit | `kcp.wiring`, `kcp.project`, `kcp.footprints.tht_footprint` |
 | `place_*.py` | Board outline, planes, every footprint at the positions from the parameters at the top of the file; silkscreen; fit check | Positions | `kcp.board`, `kcp.footprints`, `kcp.place` |
 | `route_*.py` | One function per routing group; paths derived from pad coordinates | Routing | `kcp.route` |
-| `rebuild_*.py` | The single entry point. One result line per step, stops at the first failure, refuses to run while `~*.lck` files exist | — | `kcp.kicad_cli`, `kcp.lint`, `kcp.previews`, `kcp.tracedrop` |
+| `rebuild_*.py` | The single entry point. One result line per step, stops at the first failure, refuses to run while `~*.lck` files exist | — | `kcp.kicad_cli`, `kcp.lint`, `kcp.previews`, `kcp.tracedrop`, `kcp.fab` |
 
 Principles:
 
@@ -46,6 +72,10 @@ Principles:
 - **Symbol library.** Write the project symbol library from the same definitions
   (`write_symbol_library`) and point `sym-lib-table` at it (`write_lib_tables`), so ERC finds no
   library mismatch.
+- **Project file.** `kcp.project.write_project(path, info["root_uuid"], netclasses, rules)` writes
+  the `.kicad_pro`: design rules (`DEFAULT_RULES`, prototype-fab minimums, overridden by `rules`),
+  netclasses as `(name, track width, clearance, [net patterns])` and the root sheet that
+  `write_schematic` returned. `NetClasses.from_project` reads it back for the router.
 
 ## 3. Board building on the file backend (`kcp.board`, `kcp.footprints`)
 
@@ -59,9 +89,14 @@ Principles:
 - **Board-only parts** (mounting holes): `place_footprint(..., board_only=True)`; they need no
   symbol.
 - **Moving and texts:** `kcp.place.move` rotates pads and texts with the footprint;
-  `kcp.place.set_text` moves or hides a field such as the reference.
-- **Zones are written unfilled.** `kicad-cli pcb drc --refill-zones --save-board` fills them and
-  saves the board in KiCad's own formatting; do that before DRC and fab output.
+  `kcp.place.set_text` moves or hides a field such as the reference, and shows the `Silk` field
+  on the silkscreen (`layer="F.SilkS", hide=False`; library footprints keep it hidden on F.Fab).
+- **Edge parts:** `kcp.place.at_edge` puts the courtyard and the silkscreen lines flush with the
+  edge. Many library terminals draw the pin-1 mark outside the courtyard, and KiCad's DRC flags
+  silkscreen that crosses the edge (`silk_edge_clearance`); touching it is fine.
+- **Zones are written unfilled.** `kcp.kicad_cli.refill_zones(board)` (CLI:
+  `kcp drc board --refill --save`) has KiCad fill them and save the board in its own formatting;
+  do that before DRC, previews, lint fill areas and fab output.
 - **Writes refuse while KiCad has the project open** (`~*.lck`): KiCad's next save would overwrite
   them. Ask the user to close KiCad.
 
@@ -79,9 +114,23 @@ bus(r, [(net, start, end), ...], "F.Cu", bend=20.0)             # fan-out with o
 - The router refuses any segment that is not 0/45/90° and any segment closer to other copper than
   the netclass clearance (the larger of the two nets) or to the board edge. Nothing is written on a
   conflict; `RouteConflict.conflicts` lists every problem. Change the path, don't loosen rules.
-- `bus` refuses lines whose order differs at the two ends: fix the order (pin order, row order)
-  first. `lane_order` gives the crossing-free order for a lane (routing-playbook.md §3).
+- `bus(router, lines, layer, bend, width=None, axis="x")`: each line leaves its start along
+  `axis`, turns at that coordinate (`bend`), takes one 45° section to the end's other coordinate
+  and runs on to the end. `axis="y"` for lines that leave vertically. It refuses lines whose order
+  differs at the two ends: fix the order (pin order, row order) first. `lane_order` gives the
+  crossing-free order for a lane (routing-playbook.md §3).
 - `cleanup` merges collinear segments and drops zero-length ones.
+- A generator reroutes everything on each run (`builder.remove(["segment", "arc", "via"])` first),
+  so commit per stage or per routing change rather than per group.
+
+## 4a. Fab output (`kcp.fab`)
+
+`kcp.fab.export(board, out_dir, zip_name, layers=None, readme=spec_text)` (CLI: `kcp fab`) writes
+Gerbers (all copper, masks, silkscreens, Edge.Cuts) and Excellon drill files (PTH and NPTH
+separate) into `out_dir/gerber/`, zips them with README.txt (your spec text, then the copper layer
+order read back from the X2 attributes) and SHA256SUMS.txt, and reads the zip back against the
+board: outline size, copper layers, PTH and NPTH counts (`kcp.fab.expected(board)`). `ok` is False
+on any mismatch.
 
 ## 5. Automatic silkscreen placement
 

@@ -2,5 +2,6 @@
  "ok": true,
  "overlaps": [],
  "edge": [],
+ "silk_edge": [],
  "keepouts": []
 }

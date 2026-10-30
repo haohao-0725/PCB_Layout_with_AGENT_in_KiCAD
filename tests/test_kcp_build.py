@@ -9,6 +9,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,8 +19,11 @@ SKILL = Path(__file__).resolve().parents[1] / "skills" / "kicad-clean-pcb"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(SKILL))
 
-from kcp import cli, kicad_cli  # noqa: E402
+from kcp import cli, kicad_cli, previews  # noqa: E402
 from kcp import place as pl  # noqa: E402
+from kcp.lint import load_layer_plan  # noqa: E402
+from kcp.project import write_project  # noqa: E402
+from kcp.templates import create  # noqa: E402
 from kcp.backends.file import load_board  # noqa: E402
 from kcp.board import BoardBuilder, translate_tree  # noqa: E402
 from kcp.footprints import place_footprint, stable_uuid, tht_footprint  # noqa: E402
@@ -133,6 +137,24 @@ class PlaceTests(unittest.TestCase):
         x, y = pl.at_edge(fp, (0, 0, 30, 20), "left")
         self.assertAlmostEqual(x, 1.5)          # courtyard starts 1.5 mm left of pad 1
 
+    def test_edge_placement_and_fit_check_count_silkscreen(self):
+        # Like many library terminals: a pin-1 mark drawn 0.3 mm outside the courtyard.
+        part = tht_footprint("Term", [{"number": 1, "x": 0, "y": 0, "size": 2, "drill": 1}], (-2, -2, 2, 2),
+                             silk=[(-2.3, -1.0, -2.1, 1.0)])
+        b = BoardBuilder.new(copper=2)
+        b.outline_rect(0, 0, 30, 20)
+        b.add_footprint(place_footprint(part, "Test:Term", "J1", (10, 10), 0, nets={"1": "A"}))
+        fp = b.board().footprint("J1")
+        self.assertAlmostEqual(pl.at_edge(fp, (0, 0, 30, 20), "left", silk=False)[0], 2.0)
+        x, _ = pl.at_edge(fp, (0, 0, 30, 20), "left")
+        self.assertAlmostEqual(x, 2.36)         # silk line 2.3 mm left of the origin + 0.06 mm half stroke
+        pl.move(b, "J1", 2.0, 10)
+        report = pl.fit_check(b.board())
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["silk_edge"], [{"ref": "J1", "margin_mm": -0.36}])
+        pl.move(b, "J1", x, 10)
+        self.assertTrue(pl.fit_check(b.board())["ok"])
+
 
 class RouteTests(unittest.TestCase):
     def router(self, b=None):
@@ -227,6 +249,81 @@ class TraceDropTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             analyse(load_board(DEMO), "+5V", "J1.9", {"R3.1": 0.5})
 
+    def test_pads_sharing_a_number_are_one_pin(self):
+        # A fuse holder: two clips per side, both numbered 1 (and 2). Only the first clip of side 1
+        # has a track; the source is named by number, so every clip of that number must count.
+        holder = tht_footprint("Clips", [{"number": 1, "x": 0, "y": 0, "size": 2, "drill": 1},
+                                         {"number": 1, "x": 0, "y": 5, "size": 2, "drill": 1},
+                                         {"number": 2, "x": 20, "y": 0, "size": 2, "drill": 1},
+                                         {"number": 2, "x": 20, "y": 5, "size": 2, "drill": 1}], (-2, -2, 22, 7))
+        b = BoardBuilder.new(copper=2)
+        b.add_footprint(place_footprint(holder, "Test:Clips", "F1", (10, 30), 0, nets={"1": "VIN", "2": "VF"}))
+        b.add_footprint(place_footprint(two_pin_fp(), "Test:TwoPin", "R1", (10, 10), 0, nets={"1": "VIN", "2": "X"}))
+        b.add_track((10, 10), (10, 30), 1.0, "F.Cu", "VIN")
+        board = b.board()
+        result = analyse(board, "VIN", "F1.1", {"R1.1": 1.0})
+        self.assertGreater(result["loads"][0]["drop_mv"], 0)
+        self.assertEqual(analyse(board, "VIN", "R1.1", {"F1.1": 1.0})["loads"][0]["load"], "F1.1")
+
+
+class PreviewPagesTests(unittest.TestCase):
+    def test_top_layer_drawn_last_and_outer_pours_get_their_own_page(self):
+        b = BoardBuilder.new(copper=2)
+        b.outline_rect(0, 0, 30, 20)
+        b.add_track((1, 1), (5, 1), 0.3, "F.Cu", "S")
+        self.assertEqual(previews.pages(b.board())["routing"][0][:2], ["B.Cu", "F.Cu"])
+        self.assertEqual(set(previews.pages(b.board())), {"routing", "assembly"})
+        b.add_zone("GND", ["B.Cu"], [(0, 0), (30, 0), (30, 20), (0, 20)])
+        pages = previews.pages(b.board())
+        self.assertEqual(pages["routing_FCu"][0][:2], ["F.Cu", "F.SilkS"])
+        self.assertEqual(pages["routing_BCu"][0][:2], ["B.Cu", "B.SilkS"])
+
+
+class ProjectFileTests(unittest.TestCase):
+    def test_netclasses_and_rules_read_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_project(Path(tmp) / "demo.kicad_pro", "root-uuid",
+                                 [("Power", 1.0, 0.3, ["+12V", "VIN*"]),
+                                  {"name": "Motor", "track_width": 0.8, "clearance": 0.25, "patterns": ["M_*"]}],
+                                 rules={"min_copper_edge_clearance": 0.3})
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["meta"]["filename"], "demo.kicad_pro")
+            self.assertEqual(data["sheets"], [["root-uuid", "Root"]])
+            rules = data["board"]["design_settings"]["rules"]
+            self.assertEqual((rules["min_copper_edge_clearance"], rules["min_clearance"]), (0.3, 0.2))
+            classes = NetClasses.from_project(path)
+            self.assertEqual(classes.of("+12V"), "Power")
+            self.assertEqual(classes.of("VIN_RAW"), "Power")
+            self.assertEqual(classes.of("M_A"), "Motor")
+            self.assertEqual(classes.get("Motor").track_width, 0.8)
+
+
+class NewProjectTests(unittest.TestCase):
+    def test_writes_the_skeleton_and_refuses_to_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "led_board"
+            result = create(folder, copper=4)
+            self.assertEqual(result["name"], "led_board")
+            for name in ("build_led_board.py", "place_led_board.py", "route_led_board.py", "rebuild_led_board.py",
+                         "kcp_path.py", "layer_plan.json"):
+                self.assertTrue((folder / name).is_file(), name)
+            for script in folder.glob("*.py"):
+                text = script.read_text(encoding="utf-8")
+                self.assertNotIn("__NAME__", text)
+                compile(text, str(script), "exec")
+            self.assertIn("COPPER = 4", (folder / "place_led_board.py").read_text(encoding="utf-8"))
+            self.assertEqual(load_layer_plan(folder / "layer_plan.json")["In1.Cu"], "plane")
+            with self.assertRaises(FileExistsError):
+                create(folder)
+            with self.assertRaises(ValueError):
+                create(Path(tmp) / "bad-name")
+            # kcp_path finds this kcp from the folder recorded at creation, with nothing on sys.path
+            env = {k: v for k, v in os.environ.items() if k not in ("KCP_SKILL", "PYTHONPATH")}
+            probe = subprocess.run([sys.executable, "-c", "import kcp_path, kcp; print(kcp.__file__)"], cwd=folder,
+                                   capture_output=True, text=True, env=env)
+            self.assertEqual(probe.returncode, 0, probe.stderr)
+            self.assertEqual(Path(probe.stdout.strip()).resolve().parent, (SKILL / "kcp").resolve())
+
 
 class CliBuildTests(unittest.TestCase):
     def run_cli(self, *argv):
@@ -257,6 +354,11 @@ class CliBuildTests(unittest.TestCase):
             code, data = self.run_cli("place", "move", board, "R1", "12", "12")
             self.assertEqual(code, 2)
             self.assertIn("BoardLockedError", data["error"])
+            code, data = cli.run(["drc", board, "--refill", "--save"])
+            self.assertEqual(code, 2)
+            self.assertIn("BoardLockedError", data["error"])
+            code, data = cli.run(["drc", board, "--save"])
+            self.assertIn("--refill", data["error"])
 
 
 @unittest.skipIf(os.environ.get("KCP_SKIP_KICAD") or kicad_cli.find_kicad_cli() is None,
@@ -276,6 +378,22 @@ class WiringIntegrationTests(unittest.TestCase):
         self.assertEqual(erc["errors"], 0)
         self.assertEqual(check_against_design(design, components, pins), [])
         self.assertTrue(components["R1"].path.endswith(stable_uuid("t", "symbol", "R1")))
+
+    def test_new_project_runs_end_to_end(self):
+        # `kcp new` -> rebuild script: ERC, netlist, fit check, routing, refill, DRC + parity, lint,
+        # previews, Gerber zip and readback all pass on the placeholder board.
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "demo"
+            create(folder, copper=2)
+            run = subprocess.run([sys.executable, str(folder / "rebuild_demo.py")], capture_output=True, text=True,
+                                 encoding="utf-8", errors="replace", timeout=600)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertNotIn("[FAIL]", run.stdout)
+            self.assertIn("readback matches 45x30 mm, 2 copper layers", run.stdout)
+            code, data = cli.run(["fab", folder / "demo.kicad_pcb", "--out-dir", Path(tmp) / "fab2", "--zip", "x.zip"])
+            self.assertEqual(code, 0, data)
+            self.assertTrue(data["readback"]["ok"])
+            self.assertEqual(data["expected"]["npth"], 4)
 
 
 if __name__ == "__main__":

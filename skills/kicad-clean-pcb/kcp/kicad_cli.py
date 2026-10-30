@@ -83,25 +83,35 @@ def _copy_project(board: Path, folder: Path) -> Path:
 
 
 def drc(board: PathLike, refill: bool = False, parity: bool = False, in_place: Optional[bool] = None,
-        cli: Optional[Path] = None) -> Dict:
+        cli: Optional[Path] = None, save: bool = False) -> Dict:
     """Run DRC and return the parsed JSON report.
 
     Schematic parity needs the schematic files, so it runs in place; otherwise it runs on a copy.
+    save=True (with refill) has KiCad write the refilled zones into the board file itself.
     """
     board = Path(board).resolve()
-    in_place = parity if in_place is None else in_place
+    in_place = (parity or save) if in_place is None else in_place
     with tempfile.TemporaryDirectory(prefix="kcp_drc_") as tmp:
         target = board if in_place else _copy_project(board, Path(tmp))
         report = Path(tmp) / "drc.json"
         args = ["pcb", "drc", "--format", "json", "--severity-all", "--units", "mm", "--output", str(report)]
         if refill:
             args.append("--refill-zones")
+        if save:
+            args.append("--save-board")
         if parity:
             args.append("--schematic-parity")
         result = run(args + [str(target)], cli)
         if not report.is_file():
             raise KiCadCliError(f"kicad-cli pcb drc failed: {(result.stderr or result.stdout).strip()}")
         return json.loads(report.read_text(encoding="utf-8"))
+
+
+def refill_zones(board: PathLike, cli: Optional[Path] = None) -> Dict:
+    """Refill every zone and save the board (KiCad writes the file). A board written by a script
+    has empty zones until this runs: previews, lint fill areas and Gerbers need it. Returns the
+    DRC summary of that run."""
+    return summarize_drc(drc(board, refill=True, save=True, cli=cli))
 
 
 def erc(schematic: PathLike, cli: Optional[Path] = None) -> Dict:

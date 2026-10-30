@@ -80,9 +80,11 @@ def check_decisions(file: str, checkpoint: Optional[str] = None) -> Dict[str, An
 
 
 @tool()
-def run_drc(board: str, refill: bool = False, parity: bool = False) -> Dict[str, Any]:
-    """kicad-cli DRC summarised: violations by type, unconnected items per net, schematic parity."""
-    return _run(["drc", board] + _flag("--refill", refill) + _flag("--parity", parity))
+def run_drc(board: str, refill: bool = False, parity: bool = False, save: bool = False) -> Dict[str, Any]:
+    """kicad-cli DRC summarised: violations by type, unconnected items per net, schematic parity.
+    refill=True refills zones on a copy; with save=True KiCad saves the refilled zones into the
+    board file itself (needed before previews, lint fill areas and fab output)."""
+    return _run(["drc", board] + _flag("--refill", refill or save) + _flag("--save", save) + _flag("--parity", parity))
 
 
 @tool()
@@ -94,7 +96,8 @@ def run_erc(schematic: str) -> Dict[str, Any]:
 @tool()
 def place_fit_check(board: str, keepouts: Optional[List[str]] = None, edge_min: float = 0.0,
                     ignore: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Courtyard overlaps, courtyard distance to the board edge, parts inside keep-out rectangles.
+    """Courtyard overlaps, courtyard distance to the board edge, silkscreen past the edge (silk_edge),
+    parts inside keep-out rectangles.
     keepouts: ["x0,y0,x1,y1,reason", ...] in mm."""
     argv = ["place", "fit-check", board, "--edge-min", str(edge_min)]
     for k in keepouts or []:
@@ -118,9 +121,11 @@ def place_row(board: str, refs: List[str], start_x: float, start_y: float, pitch
 
 
 @tool(read_only=False)
-def place_edge(board: str, ref: str, side: str, inset: float = 0.0) -> Dict[str, Any]:
-    """Move a connector so its courtyard is flush with a board edge (left, right, top, bottom)."""
-    return _run(["place", "edge", board, ref, "--side", side, "--inset", str(inset)])
+def place_edge(board: str, ref: str, side: str, inset: float = 0.0, courtyard_only: bool = False) -> Dict[str, Any]:
+    """Move a part flush with a board edge (left, right, top, bottom): its courtyard and silkscreen
+    lines, so no silkscreen crosses the edge. courtyard_only=True ignores the silkscreen."""
+    return _run(["place", "edge", board, ref, "--side", side, "--inset", str(inset)]
+                + _flag("--courtyard-only", courtyard_only))
 
 
 @tool(read_only=False)
@@ -162,6 +167,17 @@ def trace_drop(board: str, net: str, source: str, loads: Dict[str, float], outer
     for pad, amps in loads.items():
         argv += ["--load", f"{pad}={amps}"]
     return _run(argv)
+
+
+@tool(read_only=False)
+def export_fab(board: str, out_dir: str = "fab", refill: bool = False, zip_name: Optional[str] = None,
+               readme: Optional[str] = None, layers: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Gerbers (all copper, masks, silkscreens, Edge.Cuts) + Excellon drill (PTH/NPTH separate) into
+    out_dir/gerber, a zip with README.txt and SHA256SUMS.txt, then a readback of the zip against the
+    board (size, copper count, PTH, NPTH). readme: path of a text file with the board spec for the
+    fab. refill=True refills and saves the zones first. Nothing is uploaded or ordered."""
+    return _run(["fab", board, "--out-dir", out_dir] + _flag("--refill", refill) + _flag("--zip", zip_name)
+                + _flag("--readme", readme) + (["--layers", ",".join(layers)] if layers else []))
 
 
 @tool()

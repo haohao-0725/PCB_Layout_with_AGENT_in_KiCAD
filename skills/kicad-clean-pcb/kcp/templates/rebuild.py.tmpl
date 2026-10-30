@@ -1,0 +1,149 @@
+"""Single entry point: rebuild __NAME__ from the wiring plan to the fab zip.
+
+    python rebuild___NAME__.py                  # everything
+    python rebuild___NAME__.py --until pcb      # stop after the board checks
+
+Steps, one line each, stopping at the first failure:
+  schematic: build -> ERC 0/0 -> KiCad netlist == wiring plan
+  pcb:       place + fit check -> route -> refill zones (KiCad saves the board) -> DRC + parity 0 -> lint
+  fab:       previews + 1:1 fit-check page -> Gerber + drill + zip -> readback against the board
+
+Refuses to run while KiCad has the project open (~*.lck), because KiCad would overwrite the result.
+Needs Python 3.9+ and kicad-cli (KiCad 10); PNG previews also need Poppler's pdftoppm.
+Add a voltage-drop step (kcp.tracedrop.analyse) for nets above about 1 A.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import kcp_path  # noqa: F401  (puts kcp on sys.path)
+from kcp import kicad_cli
+from kcp.backends.file import load_board, lock_files
+from kcp.fab import export as export_fab
+from kcp.lint import lint_board, load_layer_plan
+from kcp.previews import export as export_previews
+from kcp.wiring import check_against_design, read_netlist
+
+import build___NAME__ as design
+import place___NAME__ as placement
+import route___NAME__ as routing
+
+HERE = Path(__file__).resolve().parent
+SCH = HERE / f"{design.PROJECT}.kicad_sch"
+PCB = HERE / f"{design.PROJECT}.kicad_pcb"
+REPORTS, REVIEW, FAB = HERE / "reports", HERE / "review", HERE / "fab"
+PRESET = "T"                                     # the design preset chosen at CP0
+LAYER_PLAN = HERE / "layer_plan.json"
+# The board spec for the fab, first lines of README.txt in the zip (from ORDER_SPEC.md). Empty:
+# board name, size and copper count only.
+FAB_README = ""
+
+
+class Failed(RuntimeError):
+    pass
+
+
+def step(name: str, func) -> None:
+    try:
+        detail = func()
+    except Failed as exc:
+        print(f"[FAIL] {name}: {exc}")
+        raise SystemExit(1)
+    print(f"[OK]   {name}" + (f": {detail}" if detail else ""))
+
+
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+
+
+def schematic_steps() -> None:
+    step("build schematic, libraries, rules", lambda: f"{len(design.PARTS)} parts" if design.build() else "")
+
+    def erc():
+        summary = kicad_cli.summarize_erc(kicad_cli.erc(SCH))
+        write_json(REPORTS / "erc.json", summary)
+        if summary["violations"]:
+            raise Failed(f"{summary['errors']} errors, {summary['warnings']} warnings: {summary['by_type']}")
+        return "0 errors, 0 warnings"
+    step("ERC", erc)
+
+    def netlist():
+        components, pins = read_netlist(SCH)
+        issues = check_against_design(design.DESIGN, components, pins)
+        write_json(REPORTS / "netlist_check.json", {"components": len(components), "issues": issues})
+        if issues:
+            raise Failed("; ".join(issues[:5]))
+        return f"{len(components)} components, every pin matches the wiring plan"
+    step("netlist vs wiring plan", netlist)
+
+
+def pcb_steps() -> None:
+    def place():
+        report = placement.place(PCB)
+        write_json(REPORTS / "fit_check.json", report)
+        if not report["ok"]:
+            raise Failed(json.dumps(report))
+        return "no courtyard overlaps, nothing past the edge, keep-outs clear"
+    step("place + fit check", place)
+    step("route", lambda: json.dumps(routing.route(PCB)))
+
+    def refill():
+        kicad_cli.refill_zones(PCB)
+        return "zones filled, board saved by KiCad"
+    step("refill zones", refill)
+
+    def drc():
+        summary = kicad_cli.summarize_drc(kicad_cli.drc(PCB, parity=True))
+        write_json(REPORTS / "drc.json", summary)
+        if summary["violations"] + summary["unconnected"] + summary["schematic_parity"]:
+            raise Failed(json.dumps(summary))
+        return "0 violations, 0 unconnected, parity 0"
+    step("DRC + schematic parity", drc)
+
+    def lint():
+        result = lint_board(load_board(PCB), PRESET, plan=load_layer_plan(LAYER_PLAN))
+        write_json(REPORTS / "lint.json", result)
+        if result["status"] == "fail":
+            raise Failed(", ".join(m["id"] for m in result["metrics"] if m["status"] == "fail"))
+        return f"{result['status']} ({result['summary']})"
+    step(f"tidiness lint (preset {PRESET})", lint)
+
+
+def fab_steps() -> None:
+    step("previews + 1:1 fit check", lambda: ", ".join(export_previews(PCB, REVIEW)["files"]))
+
+    def fab():
+        result = export_fab(PCB, FAB, f"{design.PROJECT}_rev{design.REVISION}_fab.zip", readme=FAB_README)
+        write_json(REPORTS / "fab.json", {k: v for k, v in result.items() if k != "readback"})
+        (REPORTS / "readback.md").write_text(result["readback"].get("markdown", ""), encoding="utf-8", newline="\n")
+        if not result["ok"]:
+            raise Failed(result["readback"].get("markdown", "")[-400:])
+        e = result["expected"]
+        return (f"{Path(result['zip']).name}: {len(result['files'])} files; readback matches "
+                f"{e['size']} mm, {e['copper']} copper layers, {e['pth']} PTH, {e['npth']} NPTH")
+    step("Gerber + drill + zip + readback", fab)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--until", choices=["schematic", "pcb", "fab"], default="fab")
+    args = parser.parse_args()
+    locks = lock_files(PCB)
+    if locks:
+        print(f"[FAIL] KiCad has the project open ({', '.join(p.name for p in locks)}); close it first")
+        return 1
+    REPORTS.mkdir(exist_ok=True)
+    schematic_steps()
+    if args.until in ("pcb", "fab"):
+        pcb_steps()
+    if args.until == "fab":
+        fab_steps()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

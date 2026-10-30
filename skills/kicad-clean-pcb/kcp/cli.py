@@ -7,12 +7,14 @@ unreadable file, kicad-cli missing, KiCad has the project open).
     python <skill>/kcp inspect board.kicad_pcb [--summary] [--refs R1,R2] [--no-pads] [--drc]
     python <skill>/kcp lint board.kicad_pcb [--preset T] [--layer-plan plan.json] [--thresholds t.json]
     python <skill>/kcp decisions PCB_DECISIONS.md [--checkpoint CP2]
-    python <skill>/kcp drc board.kicad_pcb [--refill] [--parity]
+    python <skill>/kcp drc board.kicad_pcb [--refill [--save]] [--parity]
     python <skill>/kcp erc board.kicad_sch
     python <skill>/kcp place fit-check|move|row|edge board.kicad_pcb ...
     python <skill>/kcp route path|cleanup board.kicad_pcb ... ;  kcp route lane --lines ... --entry ...
     python <skill>/kcp previews board.kicad_pcb --out-dir previews
     python <skill>/kcp tracedrop board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15
+    python <skill>/kcp fab board.kicad_pcb --out-dir fab [--refill] [--readme spec.txt]
+    python <skill>/kcp new my_board --copper 2   # project skeleton: build/place/route/rebuild scripts
     python <skill>/kcp mcp                      # MCP server on stdio (same tools)
 
 Board arguments of inspect, lint, place fit-check / move and route path also accept "live": the
@@ -104,9 +106,14 @@ def cmd_decisions(args) -> int:
 
 def cmd_drc(args) -> int:
     from . import kicad_cli
-    report = kicad_cli.drc(args.board, refill=args.refill, parity=args.parity)
+    if args.save:
+        if not args.refill:
+            raise ValueError("--save writes the refilled zones; use it with --refill")
+        _check_unlocked(args.board, args.force)
+    report = kicad_cli.drc(args.board, refill=args.refill, parity=args.parity, save=args.save)
     summary = kicad_cli.summarize_drc(report)
-    data = {"tool": "kcp drc", "file": str(args.board), "refilled": args.refill, "parity": args.parity, **summary}
+    data = {"tool": "kcp drc", "file": str(args.board), "refilled": args.refill, "saved": args.save,
+            "parity": args.parity, **summary}
     if args.full:
         data["report"] = report
     md = None
@@ -180,7 +187,7 @@ def cmd_place(args) -> int:
         fp = board.footprint(args.ref)
         if fp is None:
             raise KeyError(f"no footprint {args.ref}")
-        x, y = pl.at_edge(fp, board.outline_bbox(), args.side, args.inset)
+        x, y = pl.at_edge(fp, board.outline_bbox(), args.side, args.inset, silk=not args.courtyard_only)
         pl.move(b, args.ref, x, y)
         moved[args.ref] = [round(x, 4), round(y, 4), None]
     b.save(args.board, force=args.force)
@@ -252,6 +259,34 @@ def cmd_tracedrop(args) -> int:
     return 1 if result["above_limit"] else 0
 
 
+def _check_unlocked(board, force: bool) -> None:
+    from .backends.file import BoardLockedError, lock_files
+    locks = lock_files(board)
+    if locks and not force:
+        raise BoardLockedError(f"KiCad has the project open ({', '.join(p.name for p in locks)}); close it first")
+
+
+def cmd_fab(args) -> int:
+    from .fab import export
+    readme = args.readme.read_text(encoding="utf-8") if args.readme else ""
+    layers = [l.strip() for l in args.layers.split(",") if l.strip()] if args.layers else None
+    result = export(args.board, args.out_dir, args.zip, layers, readme, refill=args.refill,
+                    check=not args.no_readback, force=args.force)
+    md = None
+    if args.markdown:
+        md = (f"# Fab output: {result['zip']}\n\n{len(result['files'])} files; expected {result['expected']}\n\n"
+              + (result.get("readback") or {}).get("markdown", ""))
+    _emit(result, md, args.out)
+    return 0 if result["ok"] else 1
+
+
+def cmd_new(args) -> int:
+    from .templates import create
+    result = create(args.folder, args.name, args.copper, args.force)
+    _emit(result, None, args.out)
+    return 0
+
+
 def cmd_mcp(args) -> int:
     from .mcp_server import serve, tool_list
     if args.list:
@@ -294,6 +329,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("drc", help="kicad-cli DRC summarised as JSON")
     p.add_argument("board", type=Path)
     p.add_argument("--refill", action="store_true", help="refill zones first (the board file is not saved)")
+    p.add_argument("--save", action="store_true", help="with --refill: KiCad saves the refilled zones into the board")
+    p.add_argument("--force", action="store_true", help="save even if KiCad lock files exist")
     p.add_argument("--parity", action="store_true", help="include schematic parity (runs next to the schematic)")
     p.add_argument("--full", action="store_true", help="include the full kicad-cli report")
     _common(p)
@@ -307,7 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("place", help="fit check, move, rows, edge placement (writes refuse while KiCad is open)")
     actions = p.add_subparsers(dest="action", required=True)
-    a = actions.add_parser("fit-check", help="courtyard overlaps, edge distance, keep-outs")
+    a = actions.add_parser("fit-check", help="courtyard overlaps, edge distance, silkscreen past the edge, keep-outs")
     a.add_argument("board", type=Path)
     a.add_argument("--keepout", type=_keepout, action="append", help="x0,y0,x1,y1[,reason]; repeat")
     a.add_argument("--edge-min", type=float, default=0.0, help="minimum courtyard distance to the board edge (mm)")
@@ -325,11 +362,12 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--pitch", type=float, required=True)
     a.add_argument("--axis", choices=["x", "y"], default="x")
     a.add_argument("--rot", type=float, default=0.0)
-    a = actions.add_parser("edge", help="put a connector's courtyard flush with a board edge")
+    a = actions.add_parser("edge", help="put a part flush with a board edge (courtyard and silkscreen lines)")
     a.add_argument("board", type=Path)
     a.add_argument("ref")
     a.add_argument("--side", choices=["left", "right", "top", "bottom"], required=True)
     a.add_argument("--inset", type=float, default=0.0)
+    a.add_argument("--courtyard-only", action="store_true", help="ignore silkscreen lines outside the courtyard")
     for a in actions.choices.values():
         a.add_argument("--force", action="store_true", help="write even if KiCad lock files exist")
         a.add_argument("--out", type=Path, help="write the result to this file instead of stdout")
@@ -378,6 +416,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dt-limit", type=float, default=20.0)
     _common(p)
     p.set_defaults(func=cmd_tracedrop)
+
+    p = sub.add_parser("fab", help="Gerber + drill + zip (README, SHA256SUMS), read back against the board")
+    p.add_argument("board", type=Path)
+    p.add_argument("--out-dir", type=Path, default=Path("fab"))
+    p.add_argument("--zip", help="zip file name (default: <board>_fab.zip)")
+    p.add_argument("--layers", help="comma separated (default: all copper, masks, silkscreens, Edge.Cuts)")
+    p.add_argument("--readme", type=Path, help="text file with the board spec for the fab, put first in README.txt")
+    p.add_argument("--refill", action="store_true", help="refill zones and save the board first")
+    p.add_argument("--no-readback", action="store_true", help="skip reading the zip back")
+    p.add_argument("--force", action="store_true", help="refill even if KiCad lock files exist")
+    _common(p)
+    p.set_defaults(func=cmd_fab)
+
+    p = sub.add_parser("new", help="start a project: wiring plan, placement, routing and rebuild scripts")
+    p.add_argument("folder", type=Path)
+    p.add_argument("--name", help="project name (default: the folder name)")
+    p.add_argument("--copper", type=int, choices=[2, 4], default=2)
+    p.add_argument("--force", action="store_true", help="overwrite existing script files")
+    p.add_argument("--out", type=Path, help="write the result to this file instead of stdout")
+    p.set_defaults(func=cmd_new)
 
     p = sub.add_parser("mcp", help="run the MCP server on stdio (the same tools as this CLI)")
     p.add_argument("--builtin", action="store_true", help="use the built-in server even if the mcp SDK is installed")
