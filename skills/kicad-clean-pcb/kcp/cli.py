@@ -15,6 +15,7 @@ unreadable file, kicad-cli missing, KiCad has the project open).
     python <skill>/kcp tracedrop board.kicad_pcb --net +5V --source J1.1 --load U3.8=0.15
     python <skill>/kcp fab board.kicad_pcb --out-dir fab [--refill] [--readme spec.txt]
     python <skill>/kcp new my_board --copper 2   # project skeleton: build/place/route/rebuild scripts
+    python <skill>/kcp doctor                   # installed copies and versions, what to update
     python <skill>/kcp mcp                      # MCP server on stdio (same tools)
 
 Board arguments of inspect, lint, place fit-check / move and route path also accept "live": the
@@ -114,13 +115,20 @@ def cmd_drc(args) -> int:
     summary = kicad_cli.summarize_drc(report)
     data = {"tool": "kcp drc", "file": str(args.board), "refilled": args.refill, "saved": args.save,
             "parity": args.parity, **summary}
+    from .sexpr import load
+    total = summary["violations"] + summary["unconnected"] + summary["schematic_parity"]
+    details = kicad_cli.list_violations(report, load(args.board), limit=args.limit or None)
+    data["details"] = details
+    if len(details) < total:
+        data["details_not_listed"] = total - len(details)
     if args.full:
         data["report"] = report
     md = None
     if args.markdown:
         md = (f"# DRC: {summary['violations']} violations, {summary['unconnected']} unconnected, "
               f"{summary['schematic_parity']} parity issues\n\n| Type | Count |\n|---|---:|\n"
-              + "".join(f"| {k} | {v} |\n" for k, v in summary["by_type"].items()))
+              + "".join(f"| {k} | {v} |\n" for k, v in summary["by_type"].items())
+              + ("\n## Each item\n\n" + kicad_cli.violations_markdown(details, total) if details else ""))
     _emit(data, md, args.out)
     bad = summary["violations"] + summary["unconnected"] + (summary["schematic_parity"] if args.parity else 0)
     return 1 if bad else 0
@@ -182,17 +190,16 @@ def cmd_place(args) -> int:
         for ref, (x, y, a) in pl.row(refs, _point(args.start), args.pitch, args.axis, args.rot).items():
             pl.move(b, ref, x, y, a)
             moved[ref] = [x, y, a]
-    elif args.action == "edge":
-        board = b.board(args.board)
-        fp = board.footprint(args.ref)
-        if fp is None:
-            raise KeyError(f"no footprint {args.ref}")
-        x, y = pl.at_edge(fp, board.outline_bbox(), args.side, args.inset, silk=not args.courtyard_only)
-        pl.move(b, args.ref, x, y)
-        moved[args.ref] = [round(x, 4), round(y, 4), None]
+    edge = None
+    if args.action == "edge":
+        edge = pl.to_edge(b, args.ref, args.side, args.inset, silk=not args.courtyard_only, entry=args.entry)
+        moved[args.ref] = edge["at"]
     b.save(args.board, force=args.force)
     report = pl.fit_check(b.board(args.board))
-    _emit({"tool": f"kcp place {args.action}", "moved": moved, "fit_check": report}, None, args.out)
+    data = {"tool": f"kcp place {args.action}", "moved": moved, "fit_check": report}
+    if edge:
+        data.update({k: edge[k] for k in ("entry", "edge_mark") if edge.get(k)})
+    _emit(data, None, args.out)
     return 0 if report["ok"] else 1
 
 
@@ -287,6 +294,13 @@ def cmd_new(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    from .doctor import doctor, to_markdown
+    result = doctor(cli_check=not args.no_kicad)
+    _emit(result, to_markdown(result) if args.markdown else None, args.out)
+    return 0 if result["ok"] else 1
+
+
 def cmd_mcp(args) -> int:
     from .mcp_server import serve, tool_list
     if args.list:
@@ -333,6 +347,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="save even if KiCad lock files exist")
     p.add_argument("--parity", action="store_true", help="include schematic parity (runs next to the schematic)")
     p.add_argument("--full", action="store_true", help="include the full kicad-cli report")
+    p.add_argument("--limit", type=int, default=200,
+                   help="list at most this many items in 'details' (default 200; 0 lists all)")
     _common(p)
     p.set_defaults(func=cmd_drc)
 
@@ -362,12 +378,17 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--pitch", type=float, required=True)
     a.add_argument("--axis", choices=["x", "y"], default="x")
     a.add_argument("--rot", type=float, default=0.0)
-    a = actions.add_parser("edge", help="put a part flush with a board edge (courtyard and silkscreen lines)")
+    a = actions.add_parser("edge", help="put a part flush with a board edge (courtyard and silkscreen lines), "
+                                        "optionally turned so its wire or plug entry faces out")
     a.add_argument("board", type=Path)
     a.add_argument("ref")
     a.add_argument("--side", choices=["left", "right", "top", "bottom"], required=True)
-    a.add_argument("--inset", type=float, default=0.0)
+    a.add_argument("--inset", type=float, default=0.0, help="distance from the edge (mm); negative overhangs")
     a.add_argument("--courtyard-only", action="store_true", help="ignore silkscreen lines outside the courtyard")
+    a.add_argument("--entry", choices=["auto", "left", "right", "top", "bottom"],
+                   help="turn the part so its entry faces out: auto for known connectors (screw terminals, "
+                        "JST PH/XH/EH, barrel jack, footprints with a PCB Edge mark), or the side it enters "
+                        "from at rotation 0. Default: keep the rotation")
     for a in actions.choices.values():
         a.add_argument("--force", action="store_true", help="write even if KiCad lock files exist")
         a.add_argument("--out", type=Path, help="write the result to this file instead of stdout")
@@ -436,6 +457,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="overwrite existing script files")
     p.add_argument("--out", type=Path, help="write the result to this file instead of stdout")
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("doctor", help="which copies of the skill are installed, which one runs, what to update")
+    p.add_argument("--no-kicad", action="store_true", help="skip the kicad-cli check")
+    _common(p)
+    p.set_defaults(func=cmd_doctor)
 
     p = sub.add_parser("mcp", help="run the MCP server on stdio (the same tools as this CLI)")
     p.add_argument("--builtin", action="store_true", help="use the built-in server even if the mcp SDK is installed")

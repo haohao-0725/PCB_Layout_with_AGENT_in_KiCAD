@@ -46,8 +46,9 @@ def create(folder: Union[str, Path], name: Optional[str] = None, copper: int = 2
     existing = [t for t in targets if (folder / t).exists()]
     if existing and not force:
         raise FileExistsError(f"{', '.join(existing)} already exist in {folder}; use --force to overwrite")
+    from .. import __version__
     values = {"__NAME__": name, "__COPPER__": str(copper), "__KCP_SKILL__": str(SKILL),
-              "__DATE__": datetime.date.today().isoformat()}
+              "__KCP_VERSION__": __version__, "__DATE__": datetime.date.today().isoformat()}
     folder.mkdir(parents=True, exist_ok=True)
     for target, source in targets.items():
         if source is None:
@@ -61,4 +62,6 @@ def create(folder: Union[str, Path], name: Optional[str] = None, copper: int = 2
             "files": sorted(targets), "kcp": str(SKILL),
             "next": [f"python {folder / f'rebuild_{name}.py'}  (the placeholder board, end to end)",
                      f"replace PARTS in build_{name}.py with the confirmed wiring plan, then PLACEMENT "
-                     f"in place_{name}.py and the groups in route_{name}.py"]}
+                     f"and EDGE in place_{name}.py and the groups in route_{name}.py",
+                     f"the scripts need kcp {__version__} or newer: kcp_path.py finds it, or set KCP_SKILL "
+                     f"to the skill folder (python {folder / 'kcp_path.py'} prints the copy in use)"]}

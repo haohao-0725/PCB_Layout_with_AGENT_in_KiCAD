@@ -86,7 +86,8 @@ agent 第一次用自動放置加格點繞線，DRC 全過，但結果是：
 **兩種方式擇一。** 如果你以前把 skill 資料夾複製到 `~/.claude/skills/`，現在改裝 plugin，請先刪掉
 `~/.claude/skills/kicad-clean-pcb`：兩份同時存在時，`kicad-clean-pcb` 這個名稱會指到複製的那份，agent
 可能照著舊版做。安裝或更新後請開新的 session，skill 和 MCP 工具是在 session 開始時載入的。要確認的話，
-請 agent 執行 `python <skill>/kcp --version`，印出的版本應該和 `SKILL.md` 裡的一樣。
+請 agent 執行 `python <skill>/kcp doctor --markdown`（MCP 工具是 `check_setup`）：它會列出這台電腦上每一份
+skill 和各自的版本，並說明哪一份該更新或刪除。
 
 ### Claude Code：plugin marketplace（建議）
 
@@ -113,6 +114,20 @@ cp -r PCB_Layout_with_AGENT_in_KiCAD/skills/kicad-clean-pcb ~/.agents/skills/
 ```
 
 只想在單一 repo 使用時，改放 `<repo>/.agents/skills/`。舊版 Codex 讀取的是 `~/.codex/skills/`。安裝後請重新啟動 Codex。
+
+### 更新
+
+Claude Code 不會自動更新第三方 marketplace 的 plugin（預設關閉），已經開著的 session 也會繼續用開始時的版本。
+更新方式：
+
+```bash
+claude plugin marketplace update pcb-layout-with-agent
+claude plugin update kicad-clean-pcb@pcb-layout-with-agent
+```
+
+也可以在對話中輸入 `/plugin`，到 **Installed** 分頁選 `kicad-clean-pcb`，按 **Update now**。想讓它自動更新：
+`/plugin` → **Marketplaces** 分頁 → `pcb-layout-with-agent` → **Enable auto-update**。更新完請開新的 session。
+複製資料夾安裝的，請在 clone 裡 `git pull` 後重新複製一次。`kcp doctor` 會列出比這台電腦上最新版還舊的每一份。
 
 ## 開始使用
 
@@ -161,12 +176,13 @@ agent 會先做範圍檢查、請你選預設風格，然後在專案裡建立 `
 | `inspect` | 把板子讀成 JSON：板框尺寸、層與疊層、footprint 的位置／角度／正反面／courtyard 與 pad、net 的 netclass 與走線統計、走線／via／鋪銅。加 `--drc` 會附上各 net 的未連線數 |
 | `lint` | 依預設風格（T、C、R）評整齊度，每項給 pass／warn／fail。門檻在 `kcp/presets/lint.json`，要改請複製一份再用 `--thresholds` 指定。給它 layer plan（`examples/layer-plans/`）就會檢查各層主方向 |
 | `decisions` | 列出 `PCB_DECISIONS.md` 的空白列，中英文都可以。`--checkpoint CP2` 在 CP2 需要的項目還有空白時回傳 1 |
-| `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案；`--refill --save` 則由 KiCad 填銅並存回板檔 |
-| `place` | `fit-check`（courtyard 重疊、離板邊距離、絲印超出板邊、禁區）、`move`、`row`、`edge`（courtyard 與絲印一起貼齊板邊）。KiCad 開著專案時拒絕寫入 |
+| `drc`、`erc` | 把 kicad-cli 的 DRC／ERC 依類型彙整，並列出各 net 的未連線數。DRC 也會逐項列出牽涉的零件和座標，不論 KiCad 介面是什麼語言，項目名稱都一樣。DRC 在暫存複本上跑，不會在你的板子旁邊產生檔案；`--refill --save` 則由 KiCad 填銅並存回板檔 |
+| `place` | `fit-check`（courtyard 重疊、離板邊距離、絲印超出板邊、禁區）、`move`、`row`、`edge`（courtyard 與絲印一起貼齊板邊；加 `--entry auto` 會把端子台、JST PH／XH／EH、DC 插座和 USB 轉到線材從板外插入的方向）。KiCad 開著專案時拒絕寫入 |
 | `route` | `path`：焊盤 → 轉折點 → 焊盤，每段都是 0／45／90° 且符合 netclass 間距才寫入，否則列出衝突。`lane`：通道內不交叉的排序。`cleanup`：合併共線線段 |
 | `previews`、`tracedrop` | 審查用 PDF／PNG（頂層最後畫；外層有鋪銅時每個外層另出一頁）與 1:1 試合頁；某個 net 的壓降與溫升 |
 | `fab` | Gerber＋鑽孔檔、含 README.txt 與 SHA256SUMS.txt 的 zip，並把 zip 讀回來和板子比對（尺寸、銅層數、PTH、NPTH） |
 | `new` | 開一個產生器專案：build、place、route、rebuild 四個腳本，附一塊能通過所有檢查的示範板，再換成你的接線規劃 |
+| `doctor` | 列出裝了哪些份 skill（plugin、複製的資料夾）和各自的版本、正在用哪一份，以及該更新什麼 |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
@@ -206,8 +222,9 @@ python -m unittest discover -s tests -v
 
 ## MCP server 與即時模式
 
-同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 17 個：inspect、lint、decisions、DRC、ERC、
-擺放、走線、預覽、壓降、製造檔輸出、Gerber 回讀與比對；對照表在 `SKILL.md`）。唯讀工具會標示唯讀，會寫入的
+同一組工具也提供 MCP server，每個 `kcp` 指令對應一個工具（共 18 個：安裝檢查、inspect、lint、decisions、
+DRC、ERC、擺放、走線、預覽、壓降、製造檔輸出、Gerber 回讀與比對；對照表在 `SKILL.md`）。每個結果都附
+`kcp_version`，也就是回應的那個 server 的版本。唯讀工具會標示唯讀，會寫入的
 工具也會標示。MCP 工具負責檢查、擺放、走線與輸出製造檔；要從零建立原理圖和板子，需要能執行 Python 的
 agent（`kcp new`）。
 

@@ -155,6 +155,89 @@ class PlaceTests(unittest.TestCase):
         pl.move(b, "J1", x, 10)
         self.assertTrue(pl.fit_check(b.board())["ok"])
 
+    def test_entry_sides_and_facing_rotation(self):
+        # Rotation 90 turns a part's bottom (+y) side to the right, 180 to the top, 270 to the left.
+        self.assertEqual([pl.facing_rotation("bottom", s) for s in ("bottom", "right", "top", "left")],
+                         [0.0, 90.0, 180.0, 270.0])
+        self.assertEqual(pl.facing_rotation("left", "bottom"), 90.0)      # a barrel jack on the bottom edge
+        b = BoardBuilder.new(copper=2)
+        part = tht_footprint("X", [{"number": 1, "x": 0, "y": 0, "size": 2, "drill": 1}], (-2, -2, 2, 2))
+        for ref, lib_id in (("J1", "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal"),
+                            ("J2", "Connector_JST:JST_EH_S3B-EH_1x03_P2.50mm_Horizontal"),
+                            ("J3", "Connector_JST:JST_XH_S2B-XH-A_1x02_P2.50mm_Horizontal"),
+                            ("J4", "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical")):
+            b.add_footprint(place_footprint(part, lib_id, ref, (10, 10), 0))
+        board = b.board()
+        self.assertEqual([(pl.entry_side(board.footprint(r)) or (None,))[0] for r in ("J1", "J2", "J3", "J4")],
+                         ["bottom", "top", "bottom", None])     # JST EH faces the other way from XH
+
+    def test_to_edge_turns_a_terminal_so_the_wire_goes_in_from_outside(self):
+        # A terminal whose wire entry is at the bottom (+y) at rotation 0, put on the top edge.
+        part = tht_footprint("Term", [{"number": 1, "x": 0, "y": 0, "size": 2, "drill": 1},
+                                      {"number": 2, "x": 5.08, "y": 0, "size": 2, "drill": 1}], (-3, -5.7, 8.1, 5.1))
+        b = BoardBuilder.new(copper=2)
+        b.outline_rect(0, 0, 40, 30)
+        lib_id = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal"
+        b.add_footprint(place_footprint(part, lib_id, "J1", (20, 15), 0, nets={"1": "A", "2": "B"}))
+        result = pl.to_edge(b, "J1", "top", entry="auto")
+        self.assertEqual(result["at"][2], 180.0)
+        self.assertEqual(result["entry"]["at_rotation_0"], "bottom")
+        fp = b.board().footprint("J1")
+        self.assertAlmostEqual(fp.courtyard_bbox()[1], 0.0, places=4)        # flush with the top edge
+        self.assertAlmostEqual(fp.at[0], 20.0)                                # x unchanged
+        self.assertGreater(min(p.at[1] for p in fp.pads), 5.0)               # pins inside, entry at the edge
+        result = pl.to_edge(b, "J1", "left", entry="left")                   # the side it enters from, given
+        self.assertEqual(result["at"][2], 0.0)
+        self.assertAlmostEqual(b.board().footprint("J1").courtyard_bbox()[0], 0.0, places=4)
+        b.add_footprint(place_footprint(part, "Odd:Connector", "J2", (20, 20), 90))
+        with self.assertRaises(ValueError):
+            pl.to_edge(b, "J2", "bottom", entry="auto")                     # unknown: asks for the side
+        pl.to_edge(b, "J2", "bottom")                                         # entry None keeps the rotation
+        self.assertEqual(b.board().footprint("J2").angle, 90.0)
+
+    def test_to_edge_reports_the_makers_pcb_edge_mark(self):
+        # Like USB footprints: a "PCB Edge" text on Dwgs.User 1 mm inside the courtyard's bottom edge.
+        part = tht_footprint("Usb", [{"number": 1, "x": 0, "y": 0, "size": 1, "drill": 0.6}], (-4, -2.5, 4, 3.5))
+        part.append(loads('(fp_text user "PCB Edge" (at 0 2.5 0) (layer "Dwgs.User") '
+                          '(effects (font (size 0.5 0.5) (thickness 0.08))))'))
+        b = BoardBuilder.new(copper=2)
+        b.outline_rect(0, 0, 40, 30)
+        b.add_footprint(place_footprint(part, "Connector_USB:Some_Receptacle", "J4", (20, 15), 0))
+        result = pl.to_edge(b, "J4", "right", entry="auto")
+        self.assertEqual((result["at"][2], result["entry"]["source"]), (90.0, "the footprint's PCB Edge mark"))
+        self.assertEqual(result["edge_mark"]["from"], "text")
+        self.assertAlmostEqual(result["edge_mark"]["inside_mm"], 1.0, places=3)
+
+
+class DrcDetailsTests(unittest.TestCase):
+    def test_items_are_named_from_the_board_in_any_ui_language(self):
+        root = load_board(DEMO).root
+        report = {"violations": [
+            {"type": "silk_over_copper", "severity": "warning", "description": "絲印被防焊裁切",
+             "items": [{"description": "R1 的參考標示", "pos": {"x": 10.0, "y": 10.0},
+                        "uuid": "00000000-0000-4000-8000-000000000102"},
+                       {"description": "焊盤 1", "pos": {"x": 10.0, "y": 10.0}, "uuid": "00000000-0000-4000-8000-000000000105"}]},
+            {"type": "clearance", "severity": "error", "excluded": True, "items": []},
+            {"type": "clearance", "severity": "error",
+             "items": [{"description": "zone", "pos": {"x": 0, "y": 0}, "uuid": "00000000-0000-4000-8000-000000001001"},
+                       {"description": "track", "pos": {"x": 12.5, "y": 20.0},
+                        "uuid": "00000000-0000-4000-8000-000000000601"}]}],
+            "unconnected_items": [{"type": "unconnected_items", "severity": "error",
+                                   "items": [{"pos": {"x": 1, "y": 2}, "uuid": "00000000-0000-4000-8000-000000000405"},
+                                             {"pos": {"x": 3, "y": 4}, "uuid": "unknown", "description": "raw text"}]}]}
+        details = kicad_cli.list_violations(report, root)
+        self.assertEqual(len(details), 3)                                   # the excluded one is left out
+        self.assertEqual([i["item"] for i in details[0]["items"]],
+                         ["R1 Reference text (F.Fab)", "R1 pad 1 [GND]"])
+        self.assertEqual((details[0]["refs"], details[0]["at"]), (["R1"], [10.0, 10.0]))
+        self.assertEqual(details[1]["items"][0]["item"], "zone 'GND plane' [GND]")
+        self.assertEqual(details[1]["at"], [12.5, 20.0])                    # zones report 0,0: skipped
+        self.assertEqual(details[2]["kind"], "unconnected")
+        self.assertEqual([i["item"] for i in details[2]["items"]], ["J1 pad 1 [SIG_A]", "raw text"])
+        self.assertIn("| 1 | violation | silk_over_copper | warning | R1 | 10.0, 10.0 |",
+                      kicad_cli.violations_markdown(details))
+        self.assertEqual(len(kicad_cli.list_violations(report, root, limit=1)), 1)
+
 
 class RouteTests(unittest.TestCase):
     def router(self, b=None):
@@ -323,6 +406,17 @@ class NewProjectTests(unittest.TestCase):
                                    capture_output=True, text=True, env=env)
             self.assertEqual(probe.returncode, 0, probe.stderr)
             self.assertEqual(Path(probe.stdout.strip()).resolve().parent, (SKILL / "kcp").resolve())
+            from kcp import __version__
+            shown = subprocess.run([sys.executable, "kcp_path.py"], cwd=folder, capture_output=True, text=True, env=env)
+            self.assertTrue(shown.stdout.startswith(f"kcp {__version__} at "), shown.stdout + shown.stderr)
+            # An older copy is refused with a message naming it, not imported silently
+            old = Path(tmp) / "old_skill"
+            (old / "kcp").mkdir(parents=True)
+            (old / "kcp" / "__init__.py").write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+            refused = subprocess.run([sys.executable, "kcp_path.py"], cwd=folder, capture_output=True, text=True,
+                                     env={**env, "KCP_SKILL": str(old)})
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn(f"needs kcp {__version__} or newer; found 0.2.0", refused.stderr)
 
 
 class CliBuildTests(unittest.TestCase):

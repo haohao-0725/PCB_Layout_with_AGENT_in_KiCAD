@@ -251,13 +251,74 @@ class CliTests(unittest.TestCase):
 class KiCadCliIntegrationTests(unittest.TestCase):
     def test_kicad_agrees_with_the_demo_board_design(self):
         before = sorted(p.name for p in FIXTURES.iterdir())
-        summary = kicad_cli.summarize_drc(kicad_cli.drc(DEMO, refill=True))
+        report = kicad_cli.drc(DEMO, refill=True)
+        summary = kicad_cli.summarize_drc(report)
         self.assertEqual(sorted(p.name for p in FIXTURES.iterdir()), before)   # nothing written next to it
         self.assertEqual(summary["unconnected_by_net"], {"SIG_A": 1})            # the dangling stub
         for kind in ("track_dangling", "isolated_copper", "silk_over_copper"):
             self.assertIn(kind, summary["by_type"])
         for kind in ("shorting_items", "clearance"):
             self.assertNotIn(kind, summary["by_type"])
+        # Every item is named from the board file, whatever KiCad's UI language is.
+        details = kicad_cli.list_violations(report, load_board(DEMO).root)
+        self.assertEqual(len(details), summary["violations"] + summary["unconnected"])
+        unconnected = [d for d in details if d["kind"] == "unconnected"]
+        self.assertTrue(all("[SIG_A]" in i["item"] for i in unconnected[0]["items"]), unconnected)
+        silk = [d for d in details if d["type"] == "silk_over_copper"]
+        self.assertTrue(any(d["refs"] for d in silk), silk)
+        self.assertTrue(all(d["at"] is not None for d in details))
+
+
+class DoctorTests(unittest.TestCase):
+    def skill(self, folder: Path, version, kcp: bool = True) -> None:
+        folder.mkdir(parents=True)
+        meta = f'metadata:\n  version: "{version}"\n' if version else ""
+        (folder / "SKILL.md").write_text(f"---\nname: kicad-clean-pcb\n{meta}---\n# x\n", encoding="utf-8")
+        if kcp:
+            (folder / "kcp").mkdir()
+            (folder / "kcp" / "__init__.py").write_text(f'__version__ = "{version}"\n', encoding="utf-8")
+
+    def machine(self, tmp: str, plugin_version: str) -> Path:
+        claude = Path(tmp) / ".claude"
+        install = claude / "plugins" / "cache" / "mkt" / "kicad-clean-pcb" / plugin_version
+        self.skill(install / "skills" / "kicad-clean-pcb", plugin_version)
+        (claude / "plugins" / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+            "kicad-clean-pcb@mkt": [{"scope": "user", "installPath": str(install), "version": plugin_version}]}}),
+            encoding="utf-8")
+        return claude
+
+    def test_outdated_plugin_and_old_copies_are_reported(self):
+        from kcp.doctor import doctor
+        with tempfile.TemporaryDirectory() as tmp:
+            claude = self.machine(tmp, "0.2.0")
+            self.skill(claude / "skills" / "kicad-clean-pcb", None, kcp=False)      # an old copied folder
+            self.skill(Path(tmp) / ".codex" / "skills" / "kicad-clean-pcb", "0.1.0", kcp=False)
+            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp))
+        self.assertFalse(data["ok"])
+        text = "\n".join(data["warnings"])
+        self.assertIn("plugin kicad-clean-pcb@mkt is 0.2.0", text)
+        self.assertIn("claude plugin update kicad-clean-pcb@mkt", text)
+        self.assertIn("loads it instead of the plugin's", text)                    # the copied folder
+        self.assertIn("Codex and other agents", text)                               # the old Codex copy
+        self.assertEqual([c["kcp"] for c in data["copies"] if c["in_use"]], [data["kcp"]["version"]])
+
+    def test_current_plugin_alone_is_ok(self):
+        from kcp import __version__
+        from kcp.doctor import doctor, to_markdown
+        with tempfile.TemporaryDirectory() as tmp:
+            claude = self.machine(tmp, __version__)
+            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp))
+        self.assertTrue(data["ok"], data["warnings"])
+        self.assertIn("# kcp doctor: OK", to_markdown(data))
+
+    def test_versions_agree(self):
+        import re
+        from kcp import __version__
+        from kcp.doctor import skill_md_version
+        repo = SKILL.parents[1]
+        plugin = json.loads((repo / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+        pyproject = re.search(r'^version = "([^"]+)"', (repo / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+        self.assertEqual({__version__, skill_md_version(SKILL), plugin, pyproject.group(1)}, {__version__})
 
 
 if __name__ == "__main__":

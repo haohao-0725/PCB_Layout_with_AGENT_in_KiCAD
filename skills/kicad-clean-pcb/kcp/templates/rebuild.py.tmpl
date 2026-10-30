@@ -97,10 +97,16 @@ def pcb_steps() -> None:
     step("refill zones", refill)
 
     def drc():
-        summary = kicad_cli.summarize_drc(kicad_cli.drc(PCB, parity=True))
-        write_json(REPORTS / "drc.json", summary)
-        if summary["violations"] + summary["unconnected"] + summary["schematic_parity"]:
-            raise Failed(json.dumps(summary))
+        report = kicad_cli.drc(PCB, parity=True)
+        summary = kicad_cli.summarize_drc(report)
+        details = kicad_cli.list_violations(report, load_board(PCB).root)   # parts and positions, any UI language
+        write_json(REPORTS / "drc.json", {**summary, "details": details})
+        if details:
+            shown = [f"{d['type']} {','.join(d['refs'])} at {d['at']}: {'; '.join(i['item'] for i in d['items'])}"
+                     for d in details[:10]]
+            raise Failed(f"{summary['by_type']} unconnected {summary['unconnected']} parity "
+                         f"{summary['schematic_parity']}\n  " + "\n  ".join(shown)
+                         + (f"\n  ... {len(details) - 10} more in reports/drc.json" if len(details) > 10 else ""))
         return "0 violations, 0 unconnected, parity 0"
     step("DRC + schematic parity", drc)
 

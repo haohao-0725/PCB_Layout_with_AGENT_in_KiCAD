@@ -292,3 +292,20 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   5. `kcp new` 專案樣板、`kcp fab`（MCP `export_fab`）、`kcp drc --refill --save`、`kcp.project.write_project`。
 - 範例改用新函式後重建：板子內容不變。測試 80 個，Python 3.10 與 KiCad 的 3.11 都通過。
 - 報告第 6–13 項（絲印自動擺放、查庫 footprint 工具、CP4 閘門語意、circuit-policy 補充、lint 小修等）尚未處理。
+
+### 2026-10-30 第二次冷啟動試跑與 0.4.0 修正
+
+- 第二次冷啟動試跑（0.3.0）：從零做出 `sw3ch`（12 V、3 路低側開關，92 × 39 mm，2 層、0 via），
+  ERC／DRC／parity 0、Gerber 回讀通過，lint 一項 warn（2L-a 頂層方向一致率 61.8 %，有說明）。
+  卡關 20 處（0 卡死、5 拖慢、15 小問題），上次 25 處。報告在分支 `claude/strange-brattain-e086c7`
+  的 `trials/cold-start-v0.3/TRIAL_REPORT.md`（未合併）。
+- 依使用者指示修正 F1–F5（分支 `dev/trial2-fixes`，版本 0.4.0）：
+  1. F1 `kcp doctor`（MCP `check_setup`）：列出這台電腦上每份 skill 與版本，指出過期的 plugin 和舊的複製資料夾；
+     MCP 每個結果附 `kcp_version`；README 新增「更新」一節（第三方 marketplace 預設不自動更新）。
+  2. F2 `kcp new` 的 `kcp_path.py` 記錄產生時的版本，跳過較舊的副本，找不到時列出找到的版本與解法。
+  3. F3 `place edge --entry auto|left|right|top|bottom`：把連接器轉到線材從板外插入。方向表以 KiCad 10
+     的 3D 渲染（前／後視圖）驗證；JST EH 與 PH／XH 方向相反。另讀 footprint 的「PCB Edge」標記並回報距離。
+  4. F4 `kcp.place.to_edge` 與 `kcp new` 擺放樣板的 `EDGE` 表。
+  5. F5 `kcp drc` 的 `details`：每一項的零件、項目與座標，用板檔 uuid 命名，不受 KiCad 介面語言影響。
+- `kcp doctor` 在這台電腦上另外找到 `~/.codex/skills/kicad-clean-pcb`（無版本號的舊版）。
+- 測試 87 個，Python 3.10 與 KiCad 的 3.11 都通過；範例重建後板子與 Gerber 幾何不變。

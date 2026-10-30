@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0 (prepared 2026-10-30, not yet tagged)
+
+Fixes from a second cold-start trial (0.3.0: 20 friction points, none blocking; these are the
+five that slowed the agent down).
+
+- `kcp doctor` (MCP `check_setup`): the running version, every copy of the skill on the machine
+  (Claude Code plugin and cache, `~/.claude/skills`, `~/.agents/skills`, `~/.codex/skills`,
+  project folders) with its version, Python and kicad-cli; exit 1 with what to update or remove.
+  It catches an outdated plugin, which the old version check could not see. Every MCP result now
+  carries `kcp_version`. README: an "Updating" section (Claude Code does not auto-update plugins
+  from third-party marketplaces by default).
+- `kcp new`: `kcp_path.py` records the kcp version that made the project, skips older copies, and
+  fails with the versions it found instead of importing an old copy. `python kcp_path.py` prints
+  the copy in use.
+- `kcp place edge --entry auto|left|right|top|bottom` (MCP `place_edge(entry=...)`) and
+  `kcp.place.to_edge`: turn a connector so the wire or plug goes in from outside the board. Entry
+  sides of stock KiCad 10 footprints (`kcp.place.ENTRY_SIDES`) were checked with 3D renders:
+  Phoenix MKDS, MPT, PT and MSTBA, JST PH and XH face +y, JST EH faces −y, the barrel jack −x.
+  Footprints with a "PCB Edge" mark use the mark, and the result reports how far the mark is
+  from the board edge (`edge_mark.inside_mm`).
+- `kcp new`'s placement script has an `EDGE` table that calls `to_edge`.
+- `kcp drc` lists every violation, unconnected item and parity issue in `details`: the parts, what
+  each item is ("R1 Reference text (F.SilkS)", "J1 pad 2 [GND]") and its position, named from the
+  board file's uuids so the list reads the same in any KiCad UI language (`--markdown` prints a
+  table; `kcp.kicad_cli.list_violations` in scripts). The `kcp new` rebuild prints them when DRC
+  fails.
+
 ## 0.3.0 (prepared 2026-10-30, not yet tagged)
 
 Fixes from a cold-start trial: an agent with no development context built a new 2-layer board

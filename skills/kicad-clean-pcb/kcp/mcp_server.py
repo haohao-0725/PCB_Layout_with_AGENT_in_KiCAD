@@ -20,9 +20,11 @@ from . import __version__
 NAME = "kicad-clean-pcb"
 INSTRUCTIONS = (
     "Deterministic KiCad board tools for the kicad-clean-pcb skill: the agent decides, these tools "
-    "do the geometry. Read the board with inspect_board before placing or routing; route with "
-    "route_path (0/45/90 only, clearance-checked, nothing written on conflict); check with "
-    "run_drc, lint_board and check_decisions. Never loosen rules to make a check pass."
+    "do the geometry. Call check_setup once per project: it says whether this server, the skill "
+    "text and other installed copies are the same version. Read the board with inspect_board "
+    "before placing or routing; route with route_path (0/45/90 only, clearance-checked, nothing "
+    "written on conflict); check with run_drc, lint_board and check_decisions. Never loosen rules "
+    "to make a check pass."
 )
 TOOLS: List[Dict[str, Any]] = []
 
@@ -39,7 +41,7 @@ def _run(argv: List[str]) -> Dict[str, Any]:
     # in parallel threads, and stdout carries the MCP protocol.
     from .cli import run
     code, result = run([str(a) for a in argv])
-    return {"ok": code == 0, "exit_code": code, "result": result}
+    return {"ok": code == 0, "exit_code": code, "kcp_version": __version__, "result": result}
 
 
 def _flag(name: str, value: Any) -> List[str]:
@@ -51,6 +53,15 @@ def _flag(name: str, value: Any) -> List[str]:
 
 
 # ---------------------------------------------------------------- tools (one per CLI subcommand)
+
+@tool()
+def check_setup() -> Dict[str, Any]:
+    """Which version this MCP server is, every copy of the kicad-clean-pcb skill on this machine
+    (plugin, plugin cache, ~/.claude/skills, ~/.agents/skills) with its version, Python and
+    kicad-cli. ok=False lists what to update, e.g. an outdated plugin or an old copied skill
+    folder that is loaded instead of the plugin's."""
+    return _run(["doctor"])
+
 
 @tool()
 def inspect_board(board: str, summary: bool = True, refs: Optional[List[str]] = None, pads: bool = True,
@@ -121,11 +132,16 @@ def place_row(board: str, refs: List[str], start_x: float, start_y: float, pitch
 
 
 @tool(read_only=False)
-def place_edge(board: str, ref: str, side: str, inset: float = 0.0, courtyard_only: bool = False) -> Dict[str, Any]:
+def place_edge(board: str, ref: str, side: str, inset: float = 0.0, courtyard_only: bool = False,
+               entry: Optional[str] = None) -> Dict[str, Any]:
     """Move a part flush with a board edge (left, right, top, bottom): its courtyard and silkscreen
-    lines, so no silkscreen crosses the edge. courtyard_only=True ignores the silkscreen."""
+    lines, so no silkscreen crosses the edge. courtyard_only=True ignores the silkscreen.
+    entry="auto" also turns a known connector so the wire or plug goes in from outside the board
+    (screw terminals, JST PH/XH/EH, barrel jack, footprints with a PCB Edge mark); or give the side
+    it enters from at rotation 0. edge_mark in the result: inside_mm > 0 means the maker's PCB
+    Edge mark is inside the board edge (use a negative inset to follow it)."""
     return _run(["place", "edge", board, ref, "--side", side, "--inset", str(inset)]
-                + _flag("--courtyard-only", courtyard_only))
+                + _flag("--courtyard-only", courtyard_only) + _flag("--entry", entry))
 
 
 @tool(read_only=False)

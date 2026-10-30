@@ -18,7 +18,7 @@ from pathlib import Path
 import kcp_path  # noqa: F401  (puts kcp on sys.path)
 from kcp.board import BoardBuilder
 from kcp.footprints import FootprintLibrary, place_footprint
-from kcp.place import fit_check, set_text
+from kcp.place import fit_check, set_text, to_edge
 from kcp.wiring import read_netlist
 
 import build___NAME__ as design
@@ -30,11 +30,17 @@ GND_LAYERS = ["B.Cu"] if COPPER == 2 else ["In1.Cu", "In2.Cu"]
 
 # ref: (x, y, rotation). One supply line along y = 12: J1 -> C1 -> R1 -> D1.
 PLACEMENT = {
-    "J1": (6.0, 12.0, 0),        # pin 1 (+5V) at the top
+    "J1": (6.0, 12.0, 0),        # pin 1 (+5V) at the top; x comes from EDGE
     "C1": (13.0, 12.0, 270),     # pad 1 on the supply line, pad 2 (GND) below it
     "R1": (20.0, 12.0, 0),
     "D1": (39.54, 12.0, 180),    # anode (pad 2) faces R1
 }
+# Parts flush with a board edge: ref: (side, entry). The coordinate along the edge stays as in
+# PLACEMENT. entry None keeps the rotation; "auto" turns a known connector (screw terminals, JST
+# PH/XH/EH, barrel jack, footprints with a PCB Edge mark) so the wire or plug goes in from outside
+# the board; "left"/"right"/"top"/"bottom" is the side it enters from at rotation 0 (check in
+# KiCad's 3D viewer), e.g. "J2": ("bottom", "auto") for a screw terminal on the bottom edge.
+EDGE = {"J1": ("left", None)}
 KEEPOUTS = []                                    # (x0, y0, x1, y1, reason), e.g. space in front of a USB plug
 SILK = {"J1": ((0.0, 5.0), 0)}                   # ref: (local position, angle) of its "Silk" field on F.SilkS
 
@@ -63,13 +69,22 @@ def place(path: Path) -> dict:
                                         seed=f"{design.PROJECT}/{ref}"))
         set_text(b, ref, "Reference", (0.0, 0.0), 0, hide=True)
 
+    edge_notes = {}
+    for ref, (side, entry) in EDGE.items():
+        result = to_edge(b, ref, side, entry=entry)          # courtyard and silkscreen lines flush
+        if result.get("edge_mark"):
+            edge_notes[ref] = result["edge_mark"]            # the maker's PCB Edge mark: see kcp.place.to_edge
+
     # Library footprints keep the "Silk" field hidden on F.Fab; show the ones you want on F.SilkS.
     for ref, (local, angle) in SILK.items():
         set_text(b, ref, "Silk", local, angle, layer="F.SilkS", hide=False)
     b.add_text(f"{design.PROJECT} rev {design.REVISION}", (22.5, 27.0), "F.SilkS", 1.0)
 
     b.save(path)
-    return fit_check(b.board(path), keepouts=KEEPOUTS)
+    report = fit_check(b.board(path), keepouts=KEEPOUTS)
+    if edge_notes:
+        report["edge_marks"] = edge_notes
+    return report
 
 
 if __name__ == "__main__":

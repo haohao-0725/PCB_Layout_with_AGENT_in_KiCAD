@@ -1,47 +1,75 @@
 """Puts the kcp package on sys.path for this project's scripts. Import it before any `from kcp`.
 
-Search order: $KCP_SKILL (a kicad-clean-pcb skill folder, the one with kcp/ in it), the folder
-recorded when `kcp new` made this project, an installed kcp (pip install), the newest
-kicad-clean-pcb plugin in Claude Code's plugin cache, then ~/.claude/skills and ~/.agents/skills.
+This project was made by kcp __KCP_VERSION__ and needs that version or newer. Search order:
+$KCP_SKILL (a kicad-clean-pcb skill folder, the one with kcp/ in it), the folder recorded when
+`kcp new` made this project, an installed kcp (pip install), the newest kicad-clean-pcb plugin in
+Claude Code's plugin cache, then ~/.claude/skills and ~/.agents/skills. Older copies are skipped,
+and if none is new enough the error lists what was found.
+
+    python kcp_path.py          # prints the copy the scripts will use
+    KCP_SKILL=/path/to/skills/kicad-clean-pcb python rebuild___NAME__.py
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import sys
 from pathlib import Path
 
+REQUIRED = "__KCP_VERSION__"
 RECORDED = r"__KCP_SKILL__"
 
 
 def _version(text: str):
-    return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
+    return tuple(int(n) for n in re.findall(r"\d+", text or "")[:3]) or (0,)
+
+
+def _copy_version(kcp_dir: Path) -> str:
+    try:
+        text = (kcp_dir / "__init__.py").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = re.search(r"__version__\s*=\s*[\"']([^\"']+)", text)
+    return m.group(1) if m else ""
 
 
 def _candidates():
     if os.environ.get("KCP_SKILL"):
-        yield Path(os.environ["KCP_SKILL"])
-    yield Path(RECORDED)
-    yield None                                   # an installed kcp
-    cache = Path.home() / ".claude" / "plugins" / "cache"
+        yield "$KCP_SKILL", Path(os.environ["KCP_SKILL"]) / "kcp"
+    yield "recorded by kcp new", Path(RECORDED) / "kcp"
+    spec = importlib.util.find_spec("kcp")
+    if spec is not None and spec.origin:
+        yield "installed (pip)", Path(spec.origin).parent
+    cache = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "plugins" / "cache"
     plugins = sorted(cache.glob("*/kicad-clean-pcb/*/skills/kicad-clean-pcb"), key=lambda p: _version(p.parents[1].name))
-    yield from reversed(plugins)
+    for folder in reversed(plugins):
+        yield "Claude Code plugin cache", folder / "kcp"
     for base in (Path.home() / ".claude" / "skills", Path.home() / ".agents" / "skills"):
-        yield base / "kicad-clean-pcb"
+        yield "skill folder", base / "kicad-clean-pcb" / "kcp"
 
 
-def setup() -> Path:
-    for folder in _candidates():
-        if folder is None:
-            try:
-                import kcp
-            except ImportError:
-                continue
-            return Path(kcp.__file__).resolve().parent
-        if (folder / "kcp" / "__init__.py").is_file():
-            sys.path.insert(0, str(folder))
-            return folder / "kcp"
-    raise SystemExit("kcp not found: set KCP_SKILL to the kicad-clean-pcb skill folder (the one with kcp/ in it)")
+def setup():
+    too_old = []
+    for label, kcp_dir in _candidates():
+        if not (kcp_dir / "__init__.py").is_file():
+            continue
+        version = _copy_version(kcp_dir)
+        if _version(version) < _version(REQUIRED):
+            too_old.append(f"{version or '?'} at {kcp_dir.parent} ({label})")
+            if label == "$KCP_SKILL":
+                break                     # an explicit choice: don't fall back to another copy
+            continue
+        if str(kcp_dir.parent) not in sys.path:
+            sys.path.insert(0, str(kcp_dir.parent))
+        return kcp_dir, version
+    found = "; ".join(too_old) if too_old else "no copy at all"
+    raise SystemExit(f"this project needs kcp {REQUIRED} or newer; found {found}. Set KCP_SKILL to a "
+                     f"kicad-clean-pcb skill folder (the one with kcp/ in it) of that version, or update the "
+                     f"plugin (claude plugin update kicad-clean-pcb@<marketplace>) or your clone (git pull).")
 
 
-KCP = setup()
+KCP, VERSION = setup()
+
+if __name__ == "__main__":
+    print(f"kcp {VERSION} at {KCP}")

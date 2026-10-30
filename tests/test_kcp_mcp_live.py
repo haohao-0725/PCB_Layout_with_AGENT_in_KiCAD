@@ -54,6 +54,9 @@ class McpTests(unittest.TestCase):
         self.assertIn("lint_board", [t["name"] for t in replies[2]["result"]["tools"]])
         data = replies[3]["result"]["structuredContent"]
         self.assertEqual((data["exit_code"], data["result"]["preset"]), (1, "C"))
+        from kcp import __version__
+        self.assertEqual(data["kcp_version"], __version__)                   # which server answered
+        self.assertIn("check_setup", [t["name"] for t in replies[2]["result"]["tools"]])
         self.assertEqual(replies[4]["error"]["code"], -32602)
         self.assertEqual(replies[5]["error"]["code"], -32601)
 

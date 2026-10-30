@@ -10,7 +10,25 @@ in Part A: §2 Tidy, §3 Compact, §4 Robust. Mixed choices take the matching pa
 - **Connectors sit on the board edge with the cable entry facing out.** Mark pin 1 on every
   connector and terminal block (filled triangle). `kcp place edge` puts a part flush with an
   edge: its courtyard and its silkscreen lines, because many library terminals draw the pin-1
-  mark outside the courtyard and DRC flags silkscreen that crosses the edge.
+  mark outside the courtyard and DRC flags silkscreen that crosses the edge. With
+  `--entry auto` it also turns the part so the cable goes in from outside. Where the wire or
+  plug enters stock KiCad 10 footprints at rotation 0 (KiCad's y axis points down):
+
+  | Footprints | Entry at rotation 0 | Checked by |
+  |---|---|---|
+  | `TerminalBlock_Phoenix_MKDS-1,5-*`, `MKDS-3-*`, `MPT-0,5-*`, `PT-1,5-*-H` (`_Horizontal`) | bottom (+y) | 3D render |
+  | `PhoenixContact_MSTBA_2,5_*-G*_Horizontal` | bottom (+y) | 3D render |
+  | `JST_PH_S*B-*`, `JST_XH_S*B-*` (`_Horizontal`) | bottom (+y) | 3D render |
+  | `JST_EH_S*B-EH_*_Horizontal` | **top (−y)**, the other way from PH and XH | 3D render |
+  | `BarrelJack_Horizontal` | left (−x) | 3D render |
+  | `USB_B_OST_USB-B1HSxx_Horizontal` | right (+x) | footprint body |
+  | `USB_C_Receptacle_HRO_TYPE-C-31-M-12` | bottom (+y) | footprint body |
+  | Footprints with a "PCB Edge" text on Dwgs.User (most USB, FFC, D-sub, coax) | toward the mark | the mark |
+
+  Rotation 90° turns bottom → right, 180° → top, 270° → left. For anything else, look at the
+  part in KiCad's 3D viewer before placing it and pass the side it enters from; families differ
+  even within one maker. A "PCB Edge" mark also says where the maker wants the board edge: some
+  receptacles overhang it, and `place edge` reports the distance as `edge_mark.inside_mm`.
 - **Keep operating interfaces free.** USB ports, debug headers, buttons and jumpers on plugged-in
   modules are used while the board runs. Put nothing tall in front of them, and leave room for
   the plug and its cable. List them at stage 1 and check them on the 1:1 print. Give them to

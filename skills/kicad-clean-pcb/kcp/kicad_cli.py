@@ -157,6 +157,120 @@ def summarize_drc(report: Dict) -> Dict:
     }
 
 
+def _xy3(pos: Optional[Dict]) -> List[Optional[float]]:
+    pos = pos or {}
+    return [round(pos["x"], 3) if "x" in pos else None, round(pos["y"], 3) if "y" in pos else None]
+
+
+def item_index(root) -> Dict[str, Dict]:
+    """uuid -> {"label", "ref"?, "zone"?} for every board object, read from the board file.
+
+    Report descriptions are in KiCad's UI language, but every report item carries the uuid of a
+    board object, so this names items the same way on every machine: "J1 pad 1 [+5V]",
+    "R1 Reference text (F.SilkS)", "J1 line on F.SilkS", "track [GND] on F.Cu"."""
+    from .model import _net_name
+    numbers = {}
+    for net in root.all("net"):
+        atoms = net.atoms()
+        if len(atoms) >= 2:
+            numbers[str(atoms[0])] = str(atoms[1])
+    index: Dict[str, Dict] = {}
+
+    def add(node, label: str, ref: str = "", zone: bool = False) -> None:
+        uid = node.value("uuid", "")
+        if uid:
+            index[str(uid)] = {"label": label, **({"ref": ref} if ref else {}), **({"zone": True} if zone else {})}
+
+    def net_tag(node) -> str:
+        net = _net_name(node, numbers)
+        return f" [{net}]" if net else ""
+
+    for child in root.nodes():
+        name = child.name
+        layer = child.value("layer", "") or ""
+        if name in ("footprint", "module"):
+            ref = ""
+            for prop in child.all("property"):
+                if len(prop) > 2 and str(prop[1]) == "Reference":
+                    ref = str(prop[2])
+            for text in child.all("fp_text"):
+                if len(text) > 2 and str(text[1]) == "reference" and not ref:
+                    ref = str(text[2])
+            add(child, f"{ref} footprint", ref)
+            for sub in child.nodes():
+                sname = sub.name
+                slayer = sub.value("layer", "") or ""
+                if sname == "pad":
+                    number = str(sub[1]) if len(sub) > 1 else ""
+                    add(sub, f"{ref} pad {number}{net_tag(sub)}", ref)
+                elif sname == "property" and len(sub) > 1:
+                    add(sub, f"{ref} {sub[1]} text ({slayer})", ref)
+                elif sname == "fp_text" and len(sub) > 2:
+                    kind = str(sub[1])
+                    what = f"{kind.capitalize()} text" if kind in ("reference", "value") else f"text '{sub[2]}'"
+                    add(sub, f"{ref} {what} ({slayer})", ref)
+                elif sname.startswith("fp_"):
+                    add(sub, f"{ref} {sname[3:]} on {slayer}", ref)
+                elif sname == "zone":
+                    add(sub, f"{ref} zone{net_tag(sub)}", ref, zone=True)
+        elif name in ("segment", "arc"):
+            add(child, f"{'track' if name == 'segment' else 'arc track'}{net_tag(child)} on {layer}")
+        elif name == "via":
+            add(child, f"via{net_tag(child)}")
+        elif name == "zone":
+            zname = child.value("name", "") or ""
+            add(child, f"zone{' ' + repr(zname) if zname else ''}{net_tag(child)}", zone=True)
+        elif name == "gr_text" and len(child) > 1:
+            add(child, f"board text '{child[1]}' ({layer})")
+        elif name.startswith("gr_"):
+            add(child, f"board {name[3:]} on {layer}")
+    return index
+
+
+def list_violations(report: Dict, root=None, limit: Optional[int] = None) -> List[Dict]:
+    """Every DRC violation, unconnected item and parity issue with the parts involved and where.
+
+    root: the parsed board file (kcp.sexpr.load), used to name the items in any UI language;
+    without it the item descriptions from the report are used. "at" is the position (mm) of the
+    first item that is not a zone (KiCad reports zones at 0,0)."""
+    index = item_index(root) if root is not None else {}
+    groups = (("violation", [v for v in report.get("violations", []) if not v.get("excluded")]),
+              ("unconnected", report.get("unconnected_items", [])),
+              ("parity", report.get("schematic_parity", [])))
+    out: List[Dict] = []
+    for kind, entries in groups:
+        for entry in entries:
+            items, at = [], None
+            for item in entry.get("items", []):
+                info = index.get(str(item.get("uuid", "")))
+                xy = _xy3(item.get("pos"))
+                items.append({"item": info["label"] if info else item.get("description", ""),
+                              **({"ref": info["ref"]} if info and info.get("ref") else {}), "at": xy})
+                if at is None and not (info and info.get("zone")):
+                    at = xy
+            out.append({"kind": kind, "type": entry.get("type", "?"), "severity": entry.get("severity"),
+                        "refs": sorted({i["ref"] for i in items if i.get("ref")}),
+                        "at": at or (items[0]["at"] if items else None), "items": items})
+            if limit is not None and len(out) >= limit:
+                return out
+    return out
+
+
+def violations_markdown(details: List[Dict], total: Optional[int] = None) -> str:
+    """The list from list_violations as a Markdown table."""
+    if not details:
+        return ""
+    lines = ["| # | Kind | Type | Severity | Parts | At (mm) | Items |", "|---:|---|---|---|---|---|---|"]
+    for i, d in enumerate(details, 1):
+        at = d.get("at") or [None, None]
+        where = f"{at[0]}, {at[1]}" if at[0] is not None else ""
+        items = "; ".join(x["item"] for x in d["items"]).replace("|", "\\|")
+        lines.append(f"| {i} | {d['kind']} | {d['type']} | {d.get('severity') or ''} | {', '.join(d['refs'])} "
+                     f"| {where} | {items} |")
+    more = f"\n\n{total - len(details)} more not listed.\n" if total and total > len(details) else "\n"
+    return "\n".join(lines) + more
+
+
 def summarize_erc(report: Dict) -> Dict:
     violations = [v for sheet in report.get("sheets", []) for v in sheet.get("violations", [])
                   if not v.get("excluded")]

@@ -8,6 +8,7 @@ and check the fit (courtyard overlaps, distance to the board edge, keep-out area
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from . import geometry as g
@@ -118,6 +119,85 @@ def silk_bbox(fp: Footprint, texts: bool = False) -> Optional[g.BBox]:
     return g.bbox_union(boxes)
 
 
+# Where the wire or plug goes in, for stock KiCad 10 footprints at rotation 0, as drawn in the
+# footprint editor (KiCad's y axis points down, so "bottom" is +y). Checked with 3D renders
+# (kicad-cli pcb render, front and back) for every family marked "render"; the others from the
+# footprint body (pins at the back of the housing). Families differ even within one maker:
+# JST EH faces the other way from PH and XH. Footprints not listed here: see entry_side().
+ENTRY_SIDES: List[Tuple[str, str, str]] = [
+    (r"TerminalBlock_Phoenix_(MKDS-1,5|MKDS-3|MPT-0,5)-.*_Horizontal$", "bottom", "render"),
+    (r"TerminalBlock_Phoenix_PT-1,5-.*-H_.*_Horizontal$", "bottom", "render"),
+    (r"PhoenixContact_MSTBA_2,5_\d+-G(-5,08)?_.*_Horizontal$", "bottom", "render"),
+    (r"JST_(PH|XH)_S\d+B-.*_Horizontal$", "bottom", "render"),
+    (r"JST_EH_S\d+B-EH_.*_Horizontal$", "top", "render"),
+    (r"BarrelJack_Horizontal$", "left", "render"),
+    (r"USB_B_OST_USB-B1HSxx_Horizontal$", "right", "body"),
+    (r"USB_C_Receptacle_HRO_TYPE-C-31-M-12$", "bottom", "body"),
+]
+SIDES = ("left", "right", "top", "bottom")
+_OUTWARD = {"left": (-1.0, 0.0), "right": (1.0, 0.0), "top": (0.0, -1.0), "bottom": (0.0, 1.0)}
+
+
+def _local(fp: Footprint, p: Tuple[float, float]) -> Tuple[float, float]:
+    """Board point -> footprint-local coordinates."""
+    return g.rotate(p[0] - fp.at[0], p[1] - fp.at[1], -fp.angle)
+
+
+def _side_of(vec: Tuple[float, float]) -> str:
+    if abs(vec[0]) >= abs(vec[1]):
+        return "right" if vec[0] > 0 else "left"
+    return "bottom" if vec[1] > 0 else "top"
+
+
+def edge_mark(fp: Footprint) -> Optional[Dict]:
+    """The "PCB Edge" mark that many KiCad connector footprints draw on Dwgs.User (USB, FFC,
+    D-sub, coax): {"side": side at rotation 0, "local": the mark's local x or y, "from": "line" or
+    "text"}. With a line the value is exact; from the text it is approximate."""
+    text = next((t for t in fp.texts if t.text.strip().lower() == "pcb edge"), None)
+    box = fp.courtyard_bbox()
+    if text is None or box is None:
+        return None
+    centre = _local(fp, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2))
+    pos = _local(fp, text.at)
+    side = _side_of((pos[0] - centre[0], pos[1] - centre[1]))
+    axis = 0 if side in ("left", "right") else 1
+    value, source = pos[axis], "text"
+    best = None
+    for gr in fp.graphics:                 # a line across the part, near the text, on the same axis
+        if gr.layer != text.layer or gr.kind != "line":
+            continue
+        a, b = _local(fp, gr.pts[0]), _local(fp, gr.pts[1])
+        if abs(a[axis] - b[axis]) < 1e-3 and (best is None or abs(a[axis] - pos[axis]) < abs(best - pos[axis])):
+            best = a[axis]
+    if best is not None:
+        value, source = best, "line"
+    return {"side": side, "local": round(value, 4), "from": source}
+
+
+def entry_side(fp: Footprint) -> Optional[Tuple[str, str]]:
+    """(side the wire or plug enters from at rotation 0, how it is known), or None if unknown."""
+    name = fp.lib_id.split(":")[-1]
+    for pattern, side, how in ENTRY_SIDES:
+        if re.search(pattern, name):
+            return side, f"kcp.place.ENTRY_SIDES ({how})"
+    mark = edge_mark(fp)
+    if mark:
+        return mark["side"], "the footprint's PCB Edge mark"
+    return None
+
+
+def facing_rotation(entry: str, side: str) -> float:
+    """Footprint rotation (degrees) that turns its entry side (at rotation 0) toward a board side."""
+    if entry not in _OUTWARD or side not in _OUTWARD:
+        raise ValueError(f"sides are {', '.join(SIDES)}")
+    want = _OUTWARD[side]
+    for angle in (0.0, 90.0, 180.0, 270.0):
+        x, y = g.rotate(*_OUTWARD[entry], angle)
+        if abs(x - want[0]) < 1e-6 and abs(y - want[1]) < 1e-6:
+            return angle
+    raise AssertionError("unreachable")
+
+
 def at_edge(fp: Footprint, outline: g.BBox, side: str, inset: float = 0.0, silk: bool = True) -> Tuple[float, float]:
     """Footprint origin that puts the part flush with a board edge (minus inset). The part's extent
     is its courtyard plus, with silk=True, its silkscreen lines: KiCad's DRC flags silkscreen that
@@ -133,6 +213,62 @@ def at_edge(fp: Footprint, outline: g.BBox, side: str, inset: float = 0.0, silk:
     if side == "top":
         return x, y + (outline[1] + inset - box[1])
     return x, y + (outline[3] - inset - box[3])
+
+
+def to_edge(builder: BoardBuilder, ref: str, side: str, inset: float = 0.0, silk: bool = True,
+            entry: Optional[str] = None) -> Dict:
+    """Put a placed part flush with a board edge, in the builder's tree; the other coordinate is kept.
+
+    entry=None keeps the rotation. entry="auto" turns a known connector so its wire or plug entry
+    faces out of the board (ENTRY_SIDES, or the footprint's PCB Edge mark); entry="left", "right",
+    "top" or "bottom" names the side it enters from at rotation 0 (see it in KiCad's 3D viewer).
+    Returns {"ref", "at": [x, y, rotation], "entry", "edge_mark"?}. edge_mark is set when the
+    footprint marks where its maker wants the board edge: "inside_mm" > 0 means the mark lies that
+    far inside the board edge, so the plug may not seat; pass inset=-inside_mm (and accept the
+    overhang) to follow the maker."""
+    if side not in SIDES:
+        raise ValueError(f"side must be one of {', '.join(SIDES)}")
+    board = builder.board()
+    fp = board.footprint(ref)
+    if fp is None:
+        raise KeyError(f"no footprint {ref}")
+    outline = board.outline_bbox()
+    if outline is None:
+        raise ValueError("the board has no Edge.Cuts outline yet")
+    info: Dict = {"ref": ref, "entry": None}
+    if entry is not None:
+        if entry == "auto":
+            found = entry_side(fp)
+            if found is None:
+                raise ValueError(f"{ref} ({fp.lib_id}): wire/plug entry side unknown. Look at the part in KiCad's "
+                                 f"3D viewer at rotation 0 and pass entry='left', 'right', 'top' or 'bottom'")
+            local_entry, how = found
+        elif entry in SIDES:
+            local_entry, how = entry, "given"
+        else:
+            raise ValueError("entry must be auto, left, right, top or bottom")
+        angle = facing_rotation(local_entry, side)
+        move(builder, ref, fp.at[0], fp.at[1], angle)
+        fp = builder.board().footprint(ref)
+        info["entry"] = {"at_rotation_0": local_entry, "source": how}
+    x, y = at_edge(fp, outline, side, inset, silk)
+    move(builder, ref, x, y)
+    fp = builder.board().footprint(ref)
+    info["at"] = [round(fp.at[0], 4), round(fp.at[1], 4), fp.angle]
+    mark = edge_mark(fp)
+    if mark:
+        faces = _side_of(g.rotate(*_OUTWARD[mark["side"]], fp.angle))
+        if faces != side:
+            info["edge_mark"] = {"faces": faces, "note": f"the footprint's PCB Edge mark faces {faces}, not {side}: "
+                                                         f"use entry='auto' to turn it"}
+        else:
+            axis = 0 if side in ("left", "right") else 1
+            lx, ly = (mark["local"], 0.0) if mark["side"] in ("left", "right") else (0.0, mark["local"])
+            pos = g.to_board(fp.at, fp.angle, (lx, ly))[axis]
+            edge = {"left": outline[0], "right": outline[2], "top": outline[1], "bottom": outline[3]}[side]
+            inside = (pos - edge) if side in ("left", "top") else (edge - pos)
+            info["edge_mark"] = {"inside_mm": round(inside, 3), "from": mark["from"]}
+    return info
 
 
 # ---------------------------------------------------------------- fit check

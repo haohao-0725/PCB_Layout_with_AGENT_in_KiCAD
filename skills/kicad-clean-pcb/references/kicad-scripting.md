@@ -91,9 +91,27 @@ Principles:
 - **Moving and texts:** `kcp.place.move` rotates pads and texts with the footprint;
   `kcp.place.set_text` moves or hides a field such as the reference, and shows the `Silk` field
   on the silkscreen (`layer="F.SilkS", hide=False`; library footprints keep it hidden on F.Fab).
-- **Edge parts:** `kcp.place.at_edge` puts the courtyard and the silkscreen lines flush with the
-  edge. Many library terminals draw the pin-1 mark outside the courtyard, and KiCad's DRC flags
-  silkscreen that crosses the edge (`silk_edge_clearance`); touching it is fine.
+- **Edge parts:** `kcp.place.to_edge` puts the courtyard and the silkscreen lines flush with the
+  edge and keeps the other coordinate. Many library terminals draw the pin-1 mark outside the
+  courtyard, and KiCad's DRC flags silkscreen that crosses the edge (`silk_edge_clearance`);
+  touching it is fine. Call it after the footprints are added, on the builder:
+
+  ```python
+  from kcp.place import to_edge
+  EDGE = {"J1": ("bottom", "auto"), "J2": ("left", None)}       # ref: (board side, entry)
+  for ref, (side, entry) in EDGE.items():
+      result = to_edge(builder, ref, side, entry=entry)          # {"at": [x, y, rot], "entry", "edge_mark"?}
+  ```
+
+  `entry="auto"` turns the part so the wire or plug goes in from outside the board, for the
+  connectors in `kcp.place.ENTRY_SIDES` (layout-rules.md §1) and footprints with a "PCB Edge" mark;
+  any other connector raises an error that asks for the side it enters from at rotation 0
+  (`"left"`, `"right"`, `"top"`, `"bottom"`, as seen in KiCad's 3D viewer). `entry=None` keeps
+  the rotation. `edge_mark.inside_mm` > 0 means the maker's PCB Edge mark lies that far inside
+  the board edge (USB receptacles meant to overhang): pass `inset=-inside_mm` to follow it, and
+  expect the silkscreen past the edge to need `silk=False` or a moved outline. `kcp new` writes
+  this loop into `place_<name>.py`. The lower-level `at_edge(fp, outline, side)` only computes the
+  position.
 - **Zones are written unfilled.** `kcp.kicad_cli.refill_zones(board)` (CLI:
   `kcp drc board --refill --save`) has KiCad fill them and save the board in its own formatting;
   do that before DRC, previews, lint fill areas and fab output.
@@ -146,8 +164,11 @@ Check each candidate:
 - not near text already placed (0.6 mm),
 - not off the board.
 
-`kcp lint` reports silkscreen over pads; DRC reports silk overlaps. If nothing fits, list the
-item for a person or a new rule. Never leave it silently overlapping.
+`kcp lint` reports silkscreen over pads; DRC reports silk overlaps. `kcp drc` lists each one in
+`details` with the part, the item ("R1 Reference text (F.SilkS)", "J1 pad 2 [GND]", "U1 line on
+F.SilkS") and its position, named from the board file so the list reads the same in any KiCad UI
+language (`kcp.kicad_cli.list_violations(report, load_board(path).root)` in a script). If
+nothing fits, list the item for a person or a new rule. Never leave it silently overlapping.
 
 ## 6. Files and versions
 

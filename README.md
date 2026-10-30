@@ -114,8 +114,9 @@ This skill captures what fixed those problems, so the next board doesn't repeat 
 install the plugin, delete `~/.claude/skills/kicad-clean-pcb` first: with both installed, the
 name `kicad-clean-pcb` resolves to the copied folder and the agent may follow that older copy.
 Start a new session after installing or updating, because skills and MCP tools load when a
-session starts. To check, ask the agent to run `python <skill>/kcp --version`; it should print
-the version in `SKILL.md`.
+session starts. To check, ask the agent to run `python <skill>/kcp doctor --markdown` (MCP tool
+`check_setup`): it lists every copy of the skill on the machine with its version and says what
+to update or remove.
 
 ### Claude Code: plugin marketplace (recommended)
 
@@ -143,6 +144,21 @@ cp -r PCB_Layout_with_AGENT_in_KiCAD/skills/kicad-clean-pcb ~/.agents/skills/
 
 For a single repository, use `<repo>/.agents/skills/`. Older Codex releases read
 `~/.codex/skills/`. Restart Codex after installing.
+
+### Updating
+
+Claude Code doesn't update plugins from third-party marketplaces on its own (auto-update is off
+for them by default), and a session keeps the version it started with. To update:
+
+```bash
+claude plugin marketplace update pcb-layout-with-agent
+claude plugin update kicad-clean-pcb@pcb-layout-with-agent
+```
+
+Or, in a session: `/plugin`, **Installed** tab, `kicad-clean-pcb`, **Update now**. To have it
+update by itself: `/plugin`, **Marketplaces** tab, `pcb-layout-with-agent`, **Enable
+auto-update**. Then start a new session. To update a copied folder, `git pull` the clone and copy
+the folder again. `kcp doctor` reports any copy that is older than the newest one on the machine.
 
 ### Windows (PowerShell)
 
@@ -202,12 +218,13 @@ not run.
 | `inspect` | The board as JSON: outline size, layers and stackup, footprints with position, rotation, side, courtyard and pads, nets with netclass and routing stats, tracks, vias and zones. `--drc` adds unconnected items per net |
 | `lint` | Tidiness score against a preset (T, C or R), pass / warn / fail per metric. Thresholds live in `kcp/presets/lint.json`; pass your own copy with `--thresholds`. Give it a layer plan (`examples/layer-plans/`) to check each layer's main direction |
 | `decisions` | Blank rows in `PCB_DECISIONS.md`, in any language. `--checkpoint CP2` exits 1 while anything CP2 needs is unanswered |
-| `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC runs on a temporary copy, so nothing is written next to your board; `--refill --save` has KiCad fill the zones and save the board |
-| `place` | `fit-check` (courtyard overlaps, edge distance, silkscreen past the edge, keep-outs), `move`, `row`, `edge` (courtyard and silkscreen flush with the edge). Writes refuse while KiCad has the project open |
+| `drc`, `erc` | kicad-cli DRC / ERC summarised by type, unconnected items per net. DRC also lists every item with the parts involved and its position, named the same in any KiCad UI language. It runs on a temporary copy, so nothing is written next to your board; `--refill --save` has KiCad fill the zones and save the board |
+| `place` | `fit-check` (courtyard overlaps, edge distance, silkscreen past the edge, keep-outs), `move`, `row`, `edge` (courtyard and silkscreen flush with the edge; `--entry auto` turns screw terminals, JST PH/XH/EH, barrel jacks and USB parts so the cable goes in from outside). Writes refuse while KiCad has the project open |
 | `route` | `path`: pad → bend points → pad, written only if every segment is 0/45/90° and keeps the netclass clearance; otherwise a list of conflicts. `lane`: crossing-free order for a lane. `cleanup`: merge collinear segments |
 | `previews`, `tracedrop` | Review PDFs/PNGs (top layer drawn last; a page per outer layer when it has a pour) and the 1:1 fit-check page; voltage drop and temperature rise of a net |
 | `fab` | Gerbers + drill, a zip with README.txt and SHA256SUMS.txt, and a readback of the zip against the board (size, copper layers, PTH, NPTH) |
 | `new` | Starts a generator project: build, place, route and rebuild scripts for a placeholder board that passes every check, ready to replace with your wiring plan |
+| `doctor` | Which copies of the skill are installed (plugin, copied folders) with their versions, which one runs, and what to update |
 
 ```bash
 python skills/kicad-clean-pcb/kcp inspect board.kicad_pcb --summary --markdown
@@ -254,9 +271,10 @@ python -m unittest discover -s tests -v
 
 ## MCP server and live mode
 
-The same tools are available as an MCP server, one tool per `kcp` command (17 tools: inspect,
-lint, decisions, DRC, ERC, place, route, previews, trace drop, fab output, Gerber readback and
-compare; the table is in `SKILL.md`). Read-only tools are marked as such; tools that write say so.
+The same tools are available as an MCP server, one tool per `kcp` command (18 tools: setup check,
+inspect, lint, decisions, DRC, ERC, place, route, previews, trace drop, fab output, Gerber readback
+and compare; the table is in `SKILL.md`). Every result carries `kcp_version`, the version of the
+server that answered. Read-only tools are marked as such; tools that write say so.
 The MCP tools check, place and route a board and write the fab files. Creating a schematic and a
 board from nothing needs an agent that can run Python (`kcp new`).
 
