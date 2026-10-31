@@ -11,19 +11,50 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from . import __version__
 
 NAME = "kicad-clean-pcb"
-UPDATE_PLUGIN = ("claude plugin update {id}  (in a terminal; or in a session: /plugin, Installed tab, "
-                 "{id}, Update now), then start a new session")
 
 
 def version_key(text: Optional[str]):
     return tuple(int(n) for n in re.findall(r"\d+", text or "")[:3]) or (0,)
+
+
+def claude_cli(env: Optional[Mapping[str, str]] = None) -> Optional[Dict]:
+    """The `claude` command: on PATH, or else the copy the Claude desktop app runs for its Code tab,
+    which is not on PATH (Windows: %APPDATA%\\Claude\\claude-code\\<version>\\<build>\\claude.exe;
+    the folder changes when the app updates). {"path", "on_path"} or None."""
+    env = os.environ if env is None else env
+    found = shutil.which("claude", path=env.get("PATH", ""))
+    if found:
+        return {"path": found, "on_path": True}
+    appdata = env.get("APPDATA")
+    bundled = list(Path(appdata, "Claude", "claude-code").glob("*/*/claude.exe")) if appdata else []
+    if not bundled:
+        return None
+    newest = max(bundled, key=lambda p: version_key(p.parent.parent.name))
+    return {"path": str(newest), "on_path": False}
+
+
+def update_steps(plugin_id: str, cli: Optional[Dict]) -> str:
+    """How to update the plugin, with the claude command that works on this machine."""
+    exe = f'"{cli["path"]}"' if cli and not cli["on_path"] else "claude"
+    market = plugin_id.split("@", 1)[-1]
+    text = (f"run `{exe} plugin marketplace update {market}` and then `{exe} plugin update {plugin_id}` "
+            f"(or in a Claude Code session: /plugin, Installed tab, {plugin_id}, Update now), then start a "
+            f"new session.")
+    if cli and not cli["on_path"]:
+        text += (" The claude command is not on PATH here; that path is the copy the Claude desktop app runs "
+                 "(in PowerShell put & before it). You can run these for the user.")
+    elif cli is None:
+        text += (" No claude command was found: the user can run the update from a Claude Code session or "
+                 "install the Claude Code CLI.")
+    return text
 
 
 def kcp_version(skill: Path) -> Optional[str]:
@@ -104,12 +135,14 @@ def find_copies(cwd: Optional[Path] = None, claude: Optional[Path] = None, home:
 
 
 def doctor(cwd: Optional[Path] = None, claude: Optional[Path] = None, cli_check: bool = True,
-           home: Optional[Path] = None) -> Dict:
+           home: Optional[Path] = None, env: Optional[Mapping[str, str]] = None) -> Dict:
     """The report described in the module docstring. claude: Claude Code's config folder
-    (default $CLAUDE_CONFIG_DIR or ~/.claude); home: for ~/.agents and ~/.codex (tests)."""
+    (default $CLAUDE_CONFIG_DIR or ~/.claude); home: for ~/.agents and ~/.codex; env: for PATH and
+    APPDATA when looking for the claude command (tests)."""
     running = Path(__file__).resolve().parent
     skill = running.parent
     claude = claude or _claude_dir()
+    cli = claude_cli(env)
     copies = find_copies(cwd if cwd is not None else Path.cwd(), claude, home)
     for c in copies:
         c["in_use"] = _same(Path(c["path"]), skill)
@@ -130,7 +163,7 @@ def doctor(cwd: Optional[Path] = None, claude: Optional[Path] = None, cli_check:
         if version_key(plugin["version"]) < version_key(newest):
             warnings.append(f"The Claude Code plugin {plugin['id']} is {plugin['version']}, older than {newest} "
                             f"(found on this machine). Sessions load the plugin's SKILL.md and MCP tools, so "
-                            f"they follow {plugin['version']}. Update: " + UPDATE_PLUGIN.format(id=plugin["id"]))
+                            f"they follow {plugin['version']}. To update, " + update_steps(plugin["id"], cli))
     if version_key(__version__) < version_key(newest):
         better = [c for c in copies if (c["kcp"] or "") == newest]
         where = better[0]["path"] if better else "another folder"
@@ -151,7 +184,7 @@ def doctor(cwd: Optional[Path] = None, claude: Optional[Path] = None, cli_check:
             warnings.append(f"{c['path']} ({label}) is older than {newest}: {agent} follow that copy. Update "
                             f"it or remove it (ask the user first).")
 
-    kicad = {"path": None, "version": None}
+    kicad = {"checked": cli_check, "path": None, "version": None}
     if cli_check:
         from . import kicad_cli
         found = kicad_cli.find_kicad_cli()
@@ -171,17 +204,29 @@ def doctor(cwd: Optional[Path] = None, claude: Optional[Path] = None, cli_check:
             "kcp": {"version": __version__, "path": str(running)},
             "skill_md": {"version": here_md, "path": str(skill / "SKILL.md")},
             "python": {"version": sys.version.split()[0], "executable": sys.executable},
-            "kicad_cli": kicad, "copies": copies, "warnings": warnings}
+            "kicad_cli": kicad, "claude_cli": cli, "copies": copies, "warnings": warnings}
 
 
 def to_markdown(data: Dict) -> str:
     status = "OK" if data["ok"] else f"{len(data['warnings'])} problem(s)"
+    kicad = data["kicad_cli"]
+    if not kicad.get("checked", True):
+        kicad_line = "not checked (--no-kicad)"
+    else:
+        kicad_line = (kicad["version"] or "not found") + (f" (`{kicad['path']}`)" if kicad["path"] else "")
+    cli = data.get("claude_cli")
+    if cli is None:
+        claude_line = "not found"
+    elif cli["on_path"]:
+        claude_line = f"on PATH (`{cli['path']}`)"
+    else:
+        claude_line = f"not on PATH; the Claude desktop app's copy is `{cli['path']}`"
     lines = [f"# kcp doctor: {status}", "",
              f"- Running: kcp {data['kcp']['version']} at `{data['kcp']['path']}`",
              f"- SKILL.md next to it: {data['skill_md']['version']}",
              f"- Python {data['python']['version']} (`{data['python']['executable']}`)",
-             f"- kicad-cli: {data['kicad_cli']['version'] or 'not found'}"
-             + (f" (`{data['kicad_cli']['path']}`)" if data['kicad_cli']['path'] else ""), ""]
+             f"- kicad-cli: {kicad_line}",
+             f"- claude command (for plugin updates): {claude_line}", ""]
     if data["copies"]:
         lines += ["| Where | Version (SKILL.md / kcp) | In use | Path |", "|---|---|---|---|"]
         for c in data["copies"]:

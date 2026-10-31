@@ -6,4 +6,4 @@ library (3.9+), so they run from a copied skill folder:
     python <skill>/kcp inspect board.kicad_pcb
     python -m kcp lint board.kicad_pcb --preset T        (with <skill> on PYTHONPATH)
 """
-__version__ = "0.4.0"
+__version__ = "0.4.1"

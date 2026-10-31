@@ -57,9 +57,10 @@ def _flag(name: str, value: Any) -> List[str]:
 @tool()
 def check_setup() -> Dict[str, Any]:
     """Which version this MCP server is, every copy of the kicad-clean-pcb skill on this machine
-    (plugin, plugin cache, ~/.claude/skills, ~/.agents/skills) with its version, Python and
-    kicad-cli. ok=False lists what to update, e.g. an outdated plugin or an old copied skill
-    folder that is loaded instead of the plugin's."""
+    (plugin, plugin cache, ~/.claude/skills, ~/.agents/skills) with its version, Python,
+    kicad-cli and the claude command (on PATH, or the Claude desktop app's own copy). ok=False
+    lists what to update, e.g. an outdated plugin, with a command that works on this machine, or
+    an old copied skill folder that is loaded instead of the plugin's."""
     return _run(["doctor"])
 
 

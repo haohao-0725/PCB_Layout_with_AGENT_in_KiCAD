@@ -160,6 +160,19 @@ update by itself: `/plugin`, **Marketplaces** tab, `pcb-layout-with-agent`, **En
 auto-update**. Then start a new session. To update a copied folder, `git pull` the clone and copy
 the folder again. `kcp doctor` reports any copy that is older than the newest one on the machine.
 
+**Claude desktop app.** The app runs its own copy of Claude Code, which is not on PATH, so a
+terminal answers that it can't find `claude`. Ask the agent in a Code session to update the
+plugin: `kcp doctor` gives it the full path of the app's copy. Or, on Windows, run it yourself in
+PowerShell (the folder name has the app's version in it and changes when the app updates):
+
+```powershell
+$claude = (Get-ChildItem "$env:APPDATA\Claude\claude-code\*\*\claude.exe" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+& $claude plugin marketplace update pcb-layout-with-agent
+& $claude plugin update kicad-clean-pcb@pcb-layout-with-agent
+```
+
+Then start a new session.
+
 ### Windows (PowerShell)
 
 ```powershell

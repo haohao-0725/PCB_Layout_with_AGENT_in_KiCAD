@@ -309,3 +309,12 @@ pyproject.toml              # repo 根目錄；之後發佈 PyPI / uvx 用
   5. F5 `kcp drc` 的 `details`：每一項的零件、項目與座標，用板檔 uuid 命名，不受 KiCad 介面語言影響。
 - `kcp doctor` 在這台電腦上另外找到 `~/.codex/skills/kicad-clean-pcb`（無版本號的舊版）。
 - 測試 87 個，Python 3.10 與 KiCad 的 3.11 都通過；範例重建後板子與 Gerber 幾何不變。
+
+### 2026-11-01 桌面版更新方法（0.4.1）
+
+- 0.4.0 已合併進 `main` 並推上 GitHub（2026-10-31）。使用者的 plugin 由 agent 用桌面版 app 內建的
+  `claude.exe` 從 0.2.0 更新到 0.4.0：桌面版的 `claude` 不在 PATH，PowerShell 找不到。
+- 0.4.1（分支 `dev/desktop-update`）：`kcp doctor` 在 PATH 找不到 `claude` 時，改用桌面版內建那份
+  （Windows：`%APPDATA%\Claude\claude-code\<版本>\<build>\claude.exe`），更新建議附上 marketplace 與
+  plugin 兩步和完整路徑；`--no-kicad` 時顯示「not checked」而不是「not found」；README 補上桌面版的
+  更新方法與 PowerShell 指令（已在這台電腦驗證能找到程式）。測試 88 個，兩個 Python 版本都通過。

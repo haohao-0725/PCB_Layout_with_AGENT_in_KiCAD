@@ -1,7 +1,7 @@
 {
   "name": "kicad-clean-pcb",
   "displayName": "KiCad Clean PCB",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "KiCad PCB workflow for AI agents with human checkpoints: design presets, a yes/no decision checklist, placement confirmed on a 1:1 print before routing, structured routing, and kcp board tools (inspect, tidiness lint, checked routing, DRC/ERC, Gerber readback) also served over MCP.",
   "author": {
     "name": "haohao-0725",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 (prepared 2026-11-01, not yet tagged)
+
+- `kcp doctor` finds the `claude` command for plugin updates: on PATH, or else the copy the Claude
+  desktop app runs, which is not on PATH (Windows: `%APPDATA%\Claude\claude-code\<version>\<build>\claude.exe`).
+  The update advice for an outdated plugin now has both steps (marketplace, then plugin) with a
+  command that works on that machine.
+- `kcp doctor --no-kicad` says kicad-cli was not checked instead of "not found".
+- README: updating the plugin from the Claude desktop app, with a PowerShell snippet.
+
 ## 0.4.0 (prepared 2026-10-30, not yet tagged)
 
 Fixes from a second cold-start trial (0.3.0: 20 friction points, none blocking; these are the

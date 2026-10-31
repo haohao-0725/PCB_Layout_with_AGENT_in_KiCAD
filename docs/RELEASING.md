@@ -35,7 +35,7 @@ Check first that the name `kicad-clean-pcb` is still free on PyPI (or pick anoth
 
 ## GitHub
 
-- Tag the release (`git tag v0.4.0 && git push origin v0.4.0`) and create a GitHub release with
+- Tag the release (`git tag v0.4.1 && git push origin v0.4.1`) and create a GitHub release with
   the CHANGELOG section as notes.
 - Topics: kicad, kicad-pcb, pcb-design, pcb-layout, claude-code, claude-skills, agent-skills,
   codex, gerber, hardware-design, electronics.

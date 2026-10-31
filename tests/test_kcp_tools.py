@@ -293,10 +293,11 @@ class DoctorTests(unittest.TestCase):
             claude = self.machine(tmp, "0.2.0")
             self.skill(claude / "skills" / "kicad-clean-pcb", None, kcp=False)      # an old copied folder
             self.skill(Path(tmp) / ".codex" / "skills" / "kicad-clean-pcb", "0.1.0", kcp=False)
-            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp))
+            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp), env={"PATH": ""})
         self.assertFalse(data["ok"])
         text = "\n".join(data["warnings"])
         self.assertIn("plugin kicad-clean-pcb@mkt is 0.2.0", text)
+        self.assertIn("claude plugin marketplace update mkt", text)
         self.assertIn("claude plugin update kicad-clean-pcb@mkt", text)
         self.assertIn("loads it instead of the plugin's", text)                    # the copied folder
         self.assertIn("Codex and other agents", text)                               # the old Codex copy
@@ -307,9 +308,29 @@ class DoctorTests(unittest.TestCase):
         from kcp.doctor import doctor, to_markdown
         with tempfile.TemporaryDirectory() as tmp:
             claude = self.machine(tmp, __version__)
-            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp))
+            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp), env={"PATH": ""})
         self.assertTrue(data["ok"], data["warnings"])
-        self.assertIn("# kcp doctor: OK", to_markdown(data))
+        text = to_markdown(data)
+        self.assertIn("# kcp doctor: OK", text)
+        self.assertIn("kicad-cli: not checked", text)                   # --no-kicad is not "not found"
+
+    def test_update_uses_the_desktop_apps_claude_when_none_is_on_path(self):
+        from kcp.doctor import claude_cli, doctor, to_markdown
+        with tempfile.TemporaryDirectory() as tmp:
+            claude = self.machine(tmp, "0.2.0")
+            apps = Path(tmp) / "AppData" / "Claude" / "claude-code"
+            for version, build in (("2.1.9", "aaa"), ("2.1.10", "bbb")):    # 2.1.10 is newer than 2.1.9
+                (apps / version / build).mkdir(parents=True)
+                (apps / version / build / "claude.exe").write_bytes(b"")
+            env = {"PATH": "", "APPDATA": str(Path(tmp) / "AppData")}
+            newest = str(apps / "2.1.10" / "bbb" / "claude.exe")
+            self.assertEqual(claude_cli(env), {"path": newest, "on_path": False})
+            self.assertIsNone(claude_cli({"PATH": ""}))
+            data = doctor(cwd=Path(tmp), claude=claude, cli_check=False, home=Path(tmp), env=env)
+        text = "\n".join(data["warnings"])
+        self.assertIn(f'"{newest}" plugin update kicad-clean-pcb@mkt', text)
+        self.assertIn("not on PATH", text)
+        self.assertIn("the Claude desktop app's copy", to_markdown(data))
 
     def test_versions_agree(self):
         import re

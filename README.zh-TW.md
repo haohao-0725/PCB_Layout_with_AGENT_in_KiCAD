@@ -129,6 +129,18 @@ claude plugin update kicad-clean-pcb@pcb-layout-with-agent
 `/plugin` → **Marketplaces** 分頁 → `pcb-layout-with-agent` → **Enable auto-update**。更新完請開新的 session。
 複製資料夾安裝的，請在 clone 裡 `git pull` 後重新複製一次。`kcp doctor` 會列出比這台電腦上最新版還舊的每一份。
 
+**Claude 桌面版 app。** App 內建自己的一份 Claude Code，但沒有加進 PATH，所以在終端機打 `claude` 會說找不到。
+請在 Code 分頁的對話中叫 agent 幫你更新：`kcp doctor` 會告訴它 app 內建那份的完整路徑。也可以在 Windows 的
+PowerShell 自己執行（資料夾名稱含 app 的版本號，app 更新後會變）：
+
+```powershell
+$claude = (Get-ChildItem "$env:APPDATA\Claude\claude-code\*\*\claude.exe" | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+& $claude plugin marketplace update pcb-layout-with-agent
+& $claude plugin update kicad-clean-pcb@pcb-layout-with-agent
+```
+
+更新完請開新的 session。
+
 ## 開始使用
 
 直接描述你的板子，例如：

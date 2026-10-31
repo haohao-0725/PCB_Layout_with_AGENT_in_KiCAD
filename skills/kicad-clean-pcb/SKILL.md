@@ -18,7 +18,7 @@ compatibility: >-
   only) and read or write the KiCad files directly; no pcbnew bindings are needed. kicad-cli is
   needed for DRC, ERC, netlists, previews and fab output; pdftoppm (Poppler) for PNG previews.
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
 ---
 
 # KiCad PCB workflow with human checkpoints
@@ -52,7 +52,8 @@ at fixed checkpoints. Show the placement on a 1:1 printout before routing.
   kicad-cli. Exit 1 lists what to fix: an outdated plugin (its SKILL.md and MCP tools are what the
   session loaded), or an old copied folder that Claude Code loads instead of the plugin's skill.
   Tell the user and give them the command it prints; don't delete folders without asking, and
-  don't work around an old copy.
+  don't work around an old copy. In the Claude desktop app `claude` is not on PATH, so the
+  command doctor prints uses the full path of the app's own copy; offer to run it for the user.
 - No `check_setup` in your MCP tool list, or MCP results without a `kcp_version` field, means the
   plugin's MCP server is older than 0.4.0: tell the user to update the plugin (README,
   "Updating") and use the CLI meanwhile. If there is no `kcp` folder next to this file at all, an
